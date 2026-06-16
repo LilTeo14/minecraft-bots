@@ -1,0 +1,65 @@
+{
+  "sharedChests": {
+    "potatoChestPosition": {
+      "x": -608,
+      "y": 114,
+      "z": 665
+    },
+    "wheatChestPosition": {
+      "x": -609,
+      "y": 114,
+      "z": 664
+    },
+    "seedChestPosition": {
+      "x": -608,
+      "y": 114,
+      "z": 663
+    },
+    "carrotChestPosition": {
+      "x": -607,
+      "y": 114,
+      "z": 664
+    },
+    "woodChestPosition": {
+      "x": -555,
+      "y": 120,
+      "z": 662
+    }
+  },
+  "TalaBot": {
+    "shouldChop": true,
+    "bedPosition": null,
+    "type": "lumberjack"
+  },
+  "CercadorBot": {
+    "shouldFence": true,
+    "type": "fencer"
+  },
+  "CosechadorBot": {
+    "shouldFarm": true,
+    "bedPosition": {
+      "x": -604,
+      "y": 115,
+      "z": 668
+    },
+    "type": "farmer"
+  },
+  "CosechadorBot1": {
+    "shouldFarm": true,
+    "bedPosition": {
+      "x": -604,
+      "y": 115,
+      "z": 668
+    },
+    "type": "farmer"
+  },
+  "CosechadorBot2": {
+    "shouldFarm": true,
+    "bedPosition": {
+      "x": -604,
+      "y": 115,
+      "z": 668
+    },
+    "type": "farmer"
+  }
+}

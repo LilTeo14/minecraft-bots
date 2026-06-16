@@ -1,0 +1,18 @@
+# BUGS Y COMPORTAMIENTOS CONOCIDOS
+
+## Bug de la Optimización de Esquinas (optimizePathForCorners)
+
+### ¿Qué ocurre?
+El bot se quedaba atascado en las esquinas al caminar por pasillos estrechos o esquinas cerradas. El comportamiento original registraba un listener de `path_update` que llamaba a `optimizePathForCorners()`. Esta función calcula un "atajo" modificando las coordenadas de los nodos de la ruta calculada por el pathfinder, desplazándolos con decimales (por ejemplo, restándole o sumándole `0.20` a las coordenadas X/Z).
+
+Esto introduce dos problemas críticos:
+1. **Colisiones físicas**: En pasillos de 1 o 2 bloques de ancho (como túneles mineros o pasillos de cultivos/árboles), recortar la esquina hace que el bot camine de manera diagonal atravesando el borde físico de los bloques sólidos en las esquinas. Esto provoca que el bot choque con la esquina y se quede atascado, forzando la intervención del detector de atasco.
+2. **Desincronización de diagonalidad**: Si el pathfinder del bot está configurado con movimientos estrictamente ortogonales (`allowDiagonal = false`), recortar esquinas introduce coordenadas intermedias diagonales no deseadas. El controlador de movimientos no sabe cómo manejarlas limpiamente sin generar movimientos diagonales implícitos, lo cual genera bucles de reintento infinitos.
+
+### Solución aplicada
+Se ha desactivado la optimización de esquinas (`optimizePathForCorners`) para **todos los bots** en el archivo `bot.js`. Los bots ahora navegarán siguiendo de forma estricta los centros de los bloques del camino original calculado por el pathfinder.
+
+### Qué hacer y qué NO hacer en el futuro para evitar este bug
+* **NO habilitar la optimización de esquinas en espacios cerrados**: Si se requiere optimizar la velocidad en campo abierto (como para el bot talador o cosechador), se debe validar estrictamente que el bot se encuentre en la superficie (cielo abierto) o que las dimensiones a su alrededor permitan esquivar obstáculos con holgura.
+* **Alineamiento de coordenadas**: Para bots que operan en pasadizos de 1 bloque de ancho (como mineros), siempre se debe forzar que las coordenadas del bot en el eje perpendicular al movimiento estén alineadas al centro del bloque (e.g. `coordenada + 0.5`) para evitar rozar las paredes.
+* **Configuración del pathfinder**: Si se desactivan los movimientos diagonales en el pathfinder (vía `movements.allowDiagonal = false` y anulando `movements.getMoveDiagonal`), nunca se deben inyectar o modificar nodos del camino con offsets decimales diagonales.
