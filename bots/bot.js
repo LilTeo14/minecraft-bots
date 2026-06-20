@@ -641,9 +641,11 @@ async function handleCommonCommand(message, isWhisper = false, sender = OWNER) {
       else if (type === 'extras' || type === 'extra' || type === 'basura' || type === 'descarte') key = 'extraChestPosition';
       else if (type === 'picotas' || type === 'picota') key = 'picotasChest';
       else if (type === 'ores' || type === 'ore' || type === 'minerales' || type === 'mineral') key = 'oresChest';
+      else if (type === 'hachas' || type === 'hacha') key = 'axeChestPosition';
+      else if (type === 'saplings' || type === 'sapling' || type === 'retoños' || type === 'retoño') key = 'saplingChestPosition';
       
       if (!key) {
-        sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: papas, trigo, semillas, zanahorias, extras, leña, picotas, ores.`, true);
+        sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: papas, trigo, semillas, zanahorias, extras, leña, picotas, ores, hachas, saplings.`, true);
         return;
       }
       

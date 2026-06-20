@@ -40,7 +40,17 @@
     },
     "type": "lumberjack",
     "silentMode": true,
-    "viewerPort": 3010
+    "viewerPort": 3010,
+    "saplingChestPosition": {
+      "x": -589,
+      "y": 112,
+      "z": 721
+    },
+    "axeChestPosition": {
+      "x": -589,
+      "y": 112,
+      "z": 723
+    }
   },
   "CercadorBot": {
     "shouldFence": false,

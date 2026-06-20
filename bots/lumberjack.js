@@ -7,10 +7,13 @@ let isWorking = false;
 let isDepositing = false;
 let shouldChop = false;
 let woodChestPosition = null;
+let axeChestPosition = null;
+let saplingChestPosition = null;
 let bedPosition = null;
 const ignoredLogs = new Set();
 let loopTimeout = null;
 let chestErrorCooldown = 0;
+let hasFailedAxeResupply = false;
 
 // Límites del área de tala (Granja de árboles)
 const FARM_LIMITS = {
@@ -61,6 +64,8 @@ function saveBotConfig() {
   context.saveConfig({
     shouldChop,
     woodChestPosition: woodChestPosition ? { x: woodChestPosition.x, y: woodChestPosition.y, z: woodChestPosition.z } : null,
+    axeChestPosition: axeChestPosition ? { x: axeChestPosition.x, y: axeChestPosition.y, z: axeChestPosition.z } : null,
+    saplingChestPosition: saplingChestPosition ? { x: saplingChestPosition.x, y: saplingChestPosition.y, z: saplingChestPosition.z } : null,
     bedPosition: bedPosition ? { x: bedPosition.x, y: bedPosition.y, z: bedPosition.z } : null
   });
 }
@@ -68,12 +73,19 @@ function saveBotConfig() {
 function loadBotConfig() {
   try {
     shouldChop = false;
+    hasFailedAxeResupply = false;
     const config = context.getConfig();
     if (config.shouldChop !== undefined) {
       shouldChop = config.shouldChop;
     }
     if (config.woodChestPosition) {
       woodChestPosition = new Vec3(config.woodChestPosition.x, config.woodChestPosition.y, config.woodChestPosition.z);
+    }
+    if (config.axeChestPosition) {
+      axeChestPosition = new Vec3(config.axeChestPosition.x, config.axeChestPosition.y, config.axeChestPosition.z);
+    }
+    if (config.saplingChestPosition) {
+      saplingChestPosition = new Vec3(config.saplingChestPosition.x, config.saplingChestPosition.y, config.saplingChestPosition.z);
     }
     if (config.bedPosition) {
       bedPosition = new Vec3(config.bedPosition.x, config.bedPosition.y, config.bedPosition.z);
@@ -92,6 +104,10 @@ function countWood() {
     }
   }
   return count;
+}
+
+function getAxesCount() {
+  return bot.inventory.items().filter(item => item.name.includes('axe')).reduce((sum, item) => sum + item.count, 0);
 }
 
 async function depositToChest() {
@@ -141,6 +157,99 @@ async function depositToChest() {
 
   try {
     const chest = await bot.openChest(chestBlock);
+    let depositedAny = false;
+
+    let depositTarget = null;
+    do {
+      const currentItems = bot.inventory.items();
+      depositTarget = null;
+
+      for (const item of currentItems) {
+        if (item.name.includes('axe')) {
+          continue;
+        }
+
+        if (isSaplingItem(item)) {
+          continue;
+        }
+
+        depositTarget = { type: item.type, name: item.name, count: item.count };
+        break;
+      }
+
+      if (depositTarget) {
+        try {
+          console.log(`[Chest] Depositando ${depositTarget.count} de ${depositTarget.name}...`);
+          await chest.deposit(depositTarget.type, null, depositTarget.count);
+          depositedAny = true;
+          await new Promise(r => setTimeout(r, 200));
+        } catch (err) {
+          console.log(`[Chest] Error al depositar ${depositTarget.name}: ${err.message}`);
+          break; // Stop loop on failure to prevent infinite loop
+        }
+      }
+    } while (depositTarget);
+
+    chest.close();
+    if (depositedAny) {
+      sendOwnerMsg('[Chest] ¡Operación en cofre de madera completada!');
+    } else {
+      sendOwnerMsg('[Chest] No fue necesario depositar objetos.');
+    }
+  } catch (err) {
+    sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre: ${err.message}`);
+    chestErrorCooldown = Date.now() + 60000;
+    sendOwnerMsg('[Chest] Se pausarán los intentos de depósito en cofre por 60 segundos.');
+  }
+}
+
+async function manageSaplingsInChest() {
+  if (!saplingChestPosition) return;
+
+  let targetChestPosition = saplingChestPosition;
+
+  const initialBlock = bot.blockAt(targetChestPosition);
+  if (!initialBlock || !initialBlock.name.includes('chest')) {
+    const nearbyChest = bot.findBlock({
+      matching: (block) => block.name.includes('chest'),
+      point: targetChestPosition,
+      maxDistance: 2
+    });
+    if (nearbyChest) {
+      console.log(`[Chest] Corrigiendo posición del cofre de saplings a ${nearbyChest.position}`);
+      saplingChestPosition = nearbyChest.position;
+      targetChestPosition = nearbyChest.position;
+      saveBotConfig();
+    }
+  }
+
+  sendOwnerMsg(`[Chest] Yendo al cofre de saplings en ${targetChestPosition} para depositar exceso/reabastecer...`);
+
+  bot.pathfinder.setGoal(null);
+  bot.stopDigging();
+
+  const reached = await context.goToBase(targetChestPosition, 2, 15000, configureMovements);
+  if (!reached) {
+    sendOwnerMsg(`[Chest] No pude llegar al cofre de saplings en ${targetChestPosition}`);
+    return;
+  }
+
+  // Short delay to ensure bot is fully stopped before opening the chest
+  await new Promise(r => setTimeout(r, 500));
+
+  const chestBlock = bot.blockAt(targetChestPosition);
+  if (!chestBlock || !chestBlock.name.includes('chest')) {
+    sendOwnerMsg(`[Chest] El bloque en ${targetChestPosition} no es un cofre o no está cargado.`);
+    return;
+  }
+
+  const blockAbove = bot.blockAt(targetChestPosition.offset(0, 1, 0));
+  if (blockAbove && blockAbove.boundingBox !== 'empty' && blockAbove.name !== 'air' && blockAbove.name !== 'cave_air') {
+    sendOwnerMsg(`[Chest] ¡ADVERTENCIA! El cofre de saplings en ${targetChestPosition} está obstruido por "${blockAbove.name}" en la posición superior ${targetChestPosition.offset(0, 1, 0)}.`, true);
+  }
+
+  try {
+    const chest = await bot.openChest(chestBlock);
     const items = bot.inventory.items();
     let depositedAny = false;
 
@@ -167,14 +276,6 @@ async function depositToChest() {
       }
 
       for (const item of currentItems) {
-        if (item.name.includes('axe')) {
-          if (isAxeLowDurability(item)) {
-            depositTarget = { type: item.type, name: item.name, count: item.count, reason: 'hacha con baja durabilidad' };
-            break;
-          }
-          continue;
-        }
-
         if (isSaplingItem(item)) {
           const totalCount = currentSaplingCounts[item.name] || 0;
           if (totalCount > 10) {
@@ -185,25 +286,18 @@ async function depositToChest() {
               break;
             }
           }
-        } else {
-          depositTarget = { type: item.type, name: item.name, count: item.count };
-          break;
         }
       }
 
       if (depositTarget) {
         try {
-          if (depositTarget.reason) {
-            console.log(`[Chest] Depositando ${depositTarget.count} de ${depositTarget.name} (${depositTarget.reason})...`);
-          } else {
-            console.log(`[Chest] Depositando ${depositTarget.count} de ${depositTarget.name}...`);
-          }
+          console.log(`[Chest] Depositando ${depositTarget.count} de ${depositTarget.name} (${depositTarget.reason})...`);
           await chest.deposit(depositTarget.type, null, depositTarget.count);
           depositedAny = true;
           await new Promise(r => setTimeout(r, 200));
         } catch (err) {
           console.log(`[Chest] Error al depositar ${depositTarget.name}: ${err.message}`);
-          break; // Stop loop on failure to prevent infinite loop
+          break;
         }
       }
     } while (depositTarget);
@@ -244,14 +338,96 @@ async function depositToChest() {
 
     chest.close();
     if (depositedAny || withdrewAny) {
-      sendOwnerMsg('[Chest] ¡Operación en cofre completada! (Se guardó exceso y se aseguraron 10 saplings de cada tipo para replantar)');
+      sendOwnerMsg('[Chest] ¡Operación en cofre de saplings completada! (Se guardó exceso y se aseguraron 10 de cada tipo para replantar)');
     } else {
-      sendOwnerMsg('[Chest] No fue necesario depositar ni retirar objetos.');
+      sendOwnerMsg('[Chest] No fue necesario depositar ni retirar saplings.');
     }
   } catch (err) {
-    sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre: ${err.message}`);
+    sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre de saplings: ${err.message}`);
     chestErrorCooldown = Date.now() + 60000;
-    sendOwnerMsg('[Chest] Se pausarán los intentos de depósito en cofre por 60 segundos.');
+  }
+}
+
+async function withdrawAxesFromChest() {
+  if (!axeChestPosition) return;
+
+  let targetChestPosition = axeChestPosition;
+
+  const initialBlock = bot.blockAt(targetChestPosition);
+  if (!initialBlock || !initialBlock.name.includes('chest')) {
+    const nearbyChest = bot.findBlock({
+      matching: (block) => block.name.includes('chest'),
+      point: targetChestPosition,
+      maxDistance: 2
+    });
+    if (nearbyChest) {
+      console.log(`[Chest] Corrigiendo posición del cofre de hachas a ${nearbyChest.position}`);
+      axeChestPosition = nearbyChest.position;
+      targetChestPosition = nearbyChest.position;
+      saveBotConfig();
+    }
+  }
+
+  sendOwnerMsg(`[Chest] Yendo al cofre de hachas en ${targetChestPosition} para reabastecer...`);
+
+  bot.pathfinder.setGoal(null);
+  bot.stopDigging();
+
+  const reached = await context.goToBase(targetChestPosition, 2, 15000, configureMovements);
+  if (!reached) {
+    sendOwnerMsg(`[Chest] No pude llegar al cofre de hachas en ${targetChestPosition}`);
+    return;
+  }
+
+  // Short delay to ensure bot is fully stopped before opening the chest
+  await new Promise(r => setTimeout(r, 500));
+
+  const chestBlock = bot.blockAt(targetChestPosition);
+  if (!chestBlock || !chestBlock.name.includes('chest')) {
+    sendOwnerMsg(`[Chest] El bloque en ${targetChestPosition} no es un cofre o no está cargado.`);
+    return;
+  }
+
+  const blockAbove = bot.blockAt(targetChestPosition.offset(0, 1, 0));
+  if (blockAbove && blockAbove.boundingBox !== 'empty' && blockAbove.name !== 'air' && blockAbove.name !== 'cave_air') {
+    sendOwnerMsg(`[Chest] ¡ADVERTENCIA! El cofre de hachas en ${targetChestPosition} está obstruido por "${blockAbove.name}" en la posición superior ${targetChestPosition.offset(0, 1, 0)}.`, true);
+  }
+
+  try {
+    const chest = await bot.openChest(chestBlock);
+    const chestItems = chest.containerItems();
+    
+    let axesWithdrawn = 0;
+    const targetAxes = 3;
+    const currentAxes = getAxesCount();
+    const needed = targetAxes - currentAxes;
+    
+    if (needed > 0) {
+      const axesInChest = chestItems.filter(item => item && item.name.includes('axe'));
+      for (const item of axesInChest) {
+        if (axesWithdrawn >= needed) break;
+        try {
+          const toWithdraw = Math.min(item.count, needed - axesWithdrawn);
+          console.log(`[Chest] Retirando hacha: ${item.name}`);
+          await chest.withdraw(item.type, null, toWithdraw);
+          axesWithdrawn += toWithdraw;
+          await new Promise(r => setTimeout(r, 250));
+        } catch (err) {
+          console.log(`[Chest] Error al retirar hacha: ${err.message}`);
+        }
+      }
+    }
+    
+    chest.close();
+    if (axesWithdrawn > 0) {
+      sendOwnerMsg(`[Chest] Reabastecimiento completado. Se retiraron ${axesWithdrawn} hachas.`);
+    } else {
+      sendOwnerMsg(`[Chest] No se encontraron hachas en el cofre de reabastecimiento y no tengo ninguna. Continuaré talando sin hacha y no volveré a buscar hasta reiniciar mi ciclo.`, true);
+      hasFailedAxeResupply = true;
+    }
+  } catch (err) {
+    sendOwnerMsg(`[Chest] Error al interactuar con el cofre de hachas: ${err.message}`);
+    chestErrorCooldown = Date.now() + 30000;
   }
 }
 
@@ -401,12 +577,6 @@ function isSaplingItem(item) {
   return name.endsWith('_sapling') || name === 'mangrove_propagule' || name === 'azalea' || name === 'flowering_azalea';
 }
 
-function isAxeLowDurability(item) {
-  if (!item || !item.name.includes('axe')) return false;
-  if (item.maxDurability === undefined || item.maxDurability === null) return false;
-  const remaining = item.maxDurability - (item.durabilityUsed || 0);
-  return remaining <= 10;
-}
 
 async function startLumberjackLoop() {
   if (isWorking) return;
@@ -428,6 +598,20 @@ async function lumberjackCycle() {
 
   if (woodChestPosition && countWood() >= 32 && Date.now() > chestErrorCooldown) {
     await depositToChest();
+    if (saplingChestPosition) {
+      await manageSaplingsInChest();
+    }
+    return;
+  }
+
+  if (axeChestPosition && getAxesCount() === 0 && !hasFailedAxeResupply && Date.now() > chestErrorCooldown) {
+    await withdrawAxesFromChest();
+    return;
+  }
+
+  const totalSaplings = bot.inventory.items().filter(isSaplingItem).reduce((sum, item) => sum + item.count, 0);
+  if (saplingChestPosition && totalSaplings === 0 && Date.now() > chestErrorCooldown) {
+    await manageSaplingsInChest();
     return;
   }
 
@@ -628,9 +812,6 @@ async function equipBestAxe() {
 
   for (const item of items) {
     if (AXE_TIERS[item.name] && AXE_TIERS[item.name] > bestValue) {
-      if (isAxeLowDurability(item)) {
-        continue;
-      }
       bestValue = AXE_TIERS[item.name];
       bestAxe = item;
     }
@@ -642,11 +823,6 @@ async function equipBestAxe() {
       console.log(`[Inventory] Equipando herramienta: ${bestAxe.name}`);
     } catch (err) {
       console.log(`[Inventory] No se pudo equipar hacha: ${err.message}`);
-    }
-  } else {
-    const hasLowDurabilityAxe = items.some(item => item.name.includes('axe'));
-    if (hasLowDurabilityAxe) {
-      sendOwnerMsg('[Inventory] ¡ADVERTENCIA! Mis hachas tienen baja durabilidad y no las usaré para evitar que se rompan. Por favor, dame un hacha nueva o repara mis hachas.', true);
     }
   }
 }
@@ -782,10 +958,12 @@ function onChat(message, isWhisper = false) {
 
   if (msg === 'trabaja' || msg === 'tala') {
     shouldChop = true;
+    hasFailedAxeResupply = false;
     saveBotConfig();
     sendOwnerMsg('Iniciando modo talador automático.', true);
   } else if (msg === 'para') {
     shouldChop = false;
+    hasFailedAxeResupply = false;
     saveBotConfig();
     bot.pathfinder.setGoal(null);
     bot.stopDigging();
@@ -818,6 +996,14 @@ function onChat(message, isWhisper = false) {
           woodChestPosition = pos;
           saveBotConfig();
           sendOwnerMsg(`Posición del cofre de leña configurada en ${pos}`, true);
+        } else if (type === 'hachas' || type === 'hacha') {
+          axeChestPosition = pos;
+          saveBotConfig();
+          sendOwnerMsg(`Posición del cofre de hachas configurada en ${pos}`, true);
+        } else if (type === 'saplings' || type === 'sapling' || type === 'retoños' || type === 'retoño') {
+          saplingChestPosition = pos;
+          saveBotConfig();
+          sendOwnerMsg(`Posición del cofre de saplings configurada en ${pos}`, true);
         } else if (type === 'papas' || type === 'papa') {
           context.saveConfig({ potatoChestPosition: { x, y, z } });
           sendOwnerMsg(`Posición del cofre de papas configurada en ${pos} (compartida)`, true);
