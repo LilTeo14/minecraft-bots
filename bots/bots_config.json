@@ -1,9 +1,9 @@
 {
   "sharedChests": {
     "potatoChestPosition": {
-      "x": -609,
+      "x": -608,
       "y": 114,
-      "z": 664
+      "z": 665
     },
     "wheatChestPosition": {
       "x": -609,
@@ -24,6 +24,11 @@
       "x": -589,
       "y": 112,
       "z": 719
+    },
+    "extraChestPosition": {
+      "x": -604,
+      "y": 115,
+      "z": 664
     }
   },
   "TalaBot": {
@@ -98,16 +103,16 @@
       "z": 629
     },
     "miningState": {
-      "isMining": true,
+      "isMining": false,
       "startPos": {
         "x": -553,
         "y": -53,
         "z": 628
       },
       "mainDirection": "west",
-      "currentNodeIndex": 2,
+      "currentNodeIndex": 7,
       "currentBranchSide": "right",
-      "branchProgress": 2,
+      "branchProgress": 0,
       "mainTunnelProgress": 3,
       "branchLength": 20
     },

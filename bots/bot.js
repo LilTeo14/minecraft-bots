@@ -206,7 +206,7 @@ function getConfig() {
 function saveConfig(updatedConfig) {
   const currentAll = readAllConfigs();
   
-  const sharedKeys = ['potatoChestPosition', 'wheatChestPosition', 'seedChestPosition', 'carrotChestPosition', 'woodChestPosition'];
+  const sharedKeys = ['potatoChestPosition', 'wheatChestPosition', 'seedChestPosition', 'carrotChestPosition', 'woodChestPosition', 'extraChestPosition'];
   const sharedUpdate = {};
   const botUpdate = {};
   
@@ -386,7 +386,7 @@ function showModuleHelp(type) {
       '--- COMANDOS DE FARMER (Granjero) ---',
       'trabaja - Inicia el cultivo automático de campos',
       'para - Detiene el cultivo automático',
-      'cofre <papas|trigo|semillas|zanahorias|leña> <x> <y> <z> - Configura cofres específicos',
+      'cofre <papas|trigo|semillas|zanahorias|extras|leña> <x> <y> <z> - Configura cofres específicos',
       'cama <x> <y> <z> - Configura la posición de la cama para guardar respawn'
     ];
     for (const line of helpLines) {
@@ -638,11 +638,12 @@ async function handleCommonCommand(message, isWhisper = false, sender = OWNER) {
       else if (type === 'semillas' || type === 'semilla') key = 'seedChestPosition';
       else if (type === 'zanahorias' || type === 'zanahoria') key = 'carrotChestPosition';
       else if (type === 'leña' || type === 'madera') key = 'woodChestPosition';
+      else if (type === 'extras' || type === 'extra' || type === 'basura' || type === 'descarte') key = 'extraChestPosition';
       else if (type === 'picotas' || type === 'picota') key = 'picotasChest';
       else if (type === 'ores' || type === 'ore' || type === 'minerales' || type === 'mineral') key = 'oresChest';
       
       if (!key) {
-        sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: papas, trigo, semillas, zanahorias, leña, picotas, ores.`, true);
+        sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: papas, trigo, semillas, zanahorias, extras, leña, picotas, ores.`, true);
         return;
       }
       

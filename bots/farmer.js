@@ -10,6 +10,7 @@ let potatoChestPosition = null;
 let wheatChestPosition = null;
 let seedChestPosition = null;
 let carrotChestPosition = null;
+let extraChestPosition = null;
 let bedPosition = null;
 let lastDepositTime = Date.now();
 let lastSleepAttempt = 0;
@@ -60,6 +61,7 @@ function saveBotConfig() {
     wheatChestPosition: wheatChestPosition ? { x: wheatChestPosition.x, y: wheatChestPosition.y, z: wheatChestPosition.z } : null,
     seedChestPosition: seedChestPosition ? { x: seedChestPosition.x, y: seedChestPosition.y, z: seedChestPosition.z } : null,
     carrotChestPosition: carrotChestPosition ? { x: carrotChestPosition.x, y: carrotChestPosition.y, z: carrotChestPosition.z } : null,
+    extraChestPosition: extraChestPosition ? { x: extraChestPosition.x, y: extraChestPosition.y, z: extraChestPosition.z } : null,
     bedPosition: bedPosition ? { x: bedPosition.x, y: bedPosition.y, z: bedPosition.z } : null
   });
 }
@@ -83,6 +85,9 @@ function loadBotConfig() {
     }
     if (config.carrotChestPosition) {
       carrotChestPosition = new Vec3(config.carrotChestPosition.x, config.carrotChestPosition.y, config.carrotChestPosition.z);
+    }
+    if (config.extraChestPosition) {
+      extraChestPosition = new Vec3(config.extraChestPosition.x, config.extraChestPosition.y, config.extraChestPosition.z);
     }
     if (config.bedPosition) {
       bedPosition = new Vec3(config.bedPosition.x, config.bedPosition.y, config.bedPosition.z);
@@ -112,6 +117,14 @@ function getChestForItem(itemName) {
   if (itemName === 'carrot') {
     return carrotChestPosition;
   }
+  // For extra items, if extraChestPosition is configured
+  if (extraChestPosition) {
+    const isHoe = itemName.endsWith('_hoe');
+    const isFood = ['baked_potato', 'bread', 'cooked_beef', 'cooked_chicken', 'cooked_porkchop', 'golden_carrot', 'apple', 'melon_slice', 'sweet_berries'].includes(itemName);
+    if (!isHoe && !isFood && itemName !== 'torch') {
+      return extraChestPosition;
+    }
+  }
   return null;
 }
 
@@ -138,6 +151,12 @@ function getDepositsGroupedByChest() {
         amountToDeposit = Math.min(item.count, excess);
         seedCounts[item.name] -= amountToDeposit;
       }
+    } else {
+      // Check if it's an extra item mapped to the extraChestPosition
+      const chestPos = getChestForItem(item.name);
+      if (chestPos && extraChestPosition && chestPos.equals(extraChestPosition)) {
+        amountToDeposit = item.count;
+      }
     }
 
     if (amountToDeposit > 0) {
@@ -159,10 +178,11 @@ function updateChestPosition(oldPos, newPos) {
   if (wheatChestPosition && wheatChestPosition.equals(oldPos)) wheatChestPosition = newPos;
   if (seedChestPosition && seedChestPosition.equals(oldPos)) seedChestPosition = newPos;
   if (carrotChestPosition && carrotChestPosition.equals(oldPos)) carrotChestPosition = newPos;
+  if (extraChestPosition && extraChestPosition.equals(oldPos)) extraChestPosition = newPos;
 }
 
 function shouldDeposit() {
-  const hasAnyChest = potatoChestPosition || wheatChestPosition || seedChestPosition || carrotChestPosition;
+  const hasAnyChest = potatoChestPosition || wheatChestPosition || seedChestPosition || carrotChestPosition || extraChestPosition;
   if (!hasAnyChest) return false;
   if (bot.inventory.emptySlotCount() < 4) return true;
 
