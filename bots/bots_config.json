@@ -1,0 +1,116 @@
+{
+  "sharedChests": {
+    "potatoChestPosition": {
+      "x": -609,
+      "y": 114,
+      "z": 664
+    },
+    "wheatChestPosition": {
+      "x": -609,
+      "y": 114,
+      "z": 664
+    },
+    "seedChestPosition": {
+      "x": -608,
+      "y": 114,
+      "z": 663
+    },
+    "carrotChestPosition": {
+      "x": -607,
+      "y": 114,
+      "z": 664
+    },
+    "woodChestPosition": {
+      "x": -589,
+      "y": 112,
+      "z": 719
+    }
+  },
+  "TalaBot": {
+    "shouldChop": true,
+    "bedPosition": {
+      "x": -594,
+      "y": 112,
+      "z": 721
+    },
+    "type": "lumberjack",
+    "silentMode": true,
+    "viewerPort": 3010
+  },
+  "CercadorBot": {
+    "shouldFence": false,
+    "type": "fencer",
+    "viewerPort": 3011
+  },
+  "CosechadorBot": {
+    "shouldFarm": true,
+    "bedPosition": {
+      "x": -604,
+      "y": 115,
+      "z": 668
+    },
+    "type": "farmer",
+    "silentMode": true,
+    "viewerPort": 3012
+  },
+  "CosechadorBot1": {
+    "shouldFarm": true,
+    "bedPosition": {
+      "x": -604,
+      "y": 115,
+      "z": 668
+    },
+    "type": "farmer",
+    "viewerPort": 3013
+  },
+  "CosechadorBot2": {
+    "shouldFarm": true,
+    "bedPosition": {
+      "x": -604,
+      "y": 115,
+      "z": 668
+    },
+    "type": "farmer",
+    "viewerPort": 3014
+  },
+  "AradorBot": {
+    "type": "arador",
+    "silentMode": false,
+    "viewerPort": 3015,
+    "shouldArar": true
+  },
+  "AfkBot": {
+    "type": "afk",
+    "silentMode": false,
+    "viewerPort": 3016
+  },
+  "MineroBot": {
+    "type": "miner",
+    "silentMode": true,
+    "picotasChest": {
+      "x": -548,
+      "y": -53,
+      "z": 669
+    },
+    "oresChest": {
+      "x": -548,
+      "y": -53,
+      "z": 672
+    },
+    "miningState": {
+      "isMining": true,
+      "startPos": {
+        "x": -543,
+        "y": -53,
+        "z": 671
+      },
+      "mainDirection": "east",
+      "currentNodeIndex": 23,
+      "currentBranchSide": "left",
+      "branchProgress": 12,
+      "mainTunnelProgress": 3,
+      "branchLength": 20
+    },
+    "viewerPort": 3017
+  }
+}

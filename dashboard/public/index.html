@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minecraft Bots Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Navigation bar with Centered Tabs -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">🤖</div>
+      <div class="brand-title">
+        <h1>Minecraft Bots</h1>
+        <p>Control Panel & Planner</p>
+      </div>
+    </div>
+    
+    <nav class="nav-tabs">
+      <button class="tab-btn active" onclick="switchTab('bot-manager')">Bot Manager</button>
+      <button class="tab-btn" onclick="switchTab('arador-editor')">Arador Editor</button>
+    </nav>
+
+    <div class="actions" id="header-actions">
+      <!-- Actions are dynamically shown/hidden or modified based on active tab -->
+      <button class="btn btn-secondary arador-action" onclick="reloadMatrix()">Recargar</button>
+      <button class="btn btn-primary arador-action" onclick="saveMatrix()">Guardar Cambios</button>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Content -->
+  <main class="main-container">
+
+    <!-- TAB 1: BOT MANAGER -->
+    <section id="tab-bot-manager" class="tab-content active">
+      <div class="bot-manager-layout">
+        <!-- Sidebar Menu to list bots -->
+        <div class="bot-sidebar">
+          <div class="card" style="height: 100%; display: flex; flex-direction: column; gap: 1rem;">
+            <div class="card-title">Bots Registrados</div>
+            
+            <!-- Bot List container -->
+            <div class="bot-list-scroll" id="bot-list-container">
+              <!-- Dynamically populated via JS -->
+            </div>
+            
+            <hr class="divider">
+            
+            <!-- Form to add bot -->
+            <div class="add-bot-form">
+              <h3 style="font-size: 0.95rem; margin-bottom: 0.75rem; color: var(--text-main);">Crear Nuevo Bot</h3>
+              <div class="form-group">
+                <input type="text" id="new-bot-name" placeholder="Nombre del Bot" class="form-input">
+              </div>
+              <div class="form-group">
+                <select id="new-bot-type" class="form-select">
+                  <option value="farmer">Farmer (Cultivador)</option>
+                  <option value="arador">Arador</option>
+                  <option value="lumberjack">Lumberjack (Leñador)</option>
+                  <option value="miner">Miner (Minero)</option>
+                  <option value="fencer">Fencer (Cercador)</option>
+                  <option value="filler">Filler (Rellenador)</option>
+                  <option value="breeder">Breeder (Criador)</option>
+                  <option value="afk">AFK</option>
+                </select>
+              </div>
+              <button class="btn btn-primary" onclick="handleAddBot()" style="width: 100%; justify-content: center; font-size: 0.85rem; padding: 0.5rem;">
+                ➕ Agregar Bot
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bot Detail/Main Pane -->
+        <div class="bot-details-pane">
+          <div id="bot-details-container">
+            <!-- Dynamically populated details card grid or empty state via JS -->
+            <div class="card" style="height: 100%; min-height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
+              <div class="empty-detail-state">
+                <div class="empty-icon">🤖</div>
+                <h3>Selecciona un bot</h3>
+                <p>Elige uno o más bots de la lista para ver su configuración y detalles simultáneamente.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 2: ARADOR EDITOR -->
+    <section id="tab-arador-editor" class="tab-content">
+      <div class="arador-grid-container">
+        <div class="sidebar">
+          <div class="card">
+            <div class="card-title">Herramientas</div>
+            <div class="tools-grid">
+              <button class="tool-btn active" id="tool-pencil" onclick="setTool('pencil')">
+                <span style="font-size: 1.2rem;">✏️</span>
+                Pincel
+              </button>
+              <button class="tool-btn" id="tool-rect" onclick="setTool('rect')">
+                <span style="font-size: 1.2rem;">⬛</span>
+                Rectángulo
+              </button>
+              <button class="tool-btn" id="tool-bucket" onclick="setTool('bucket')">
+                <span style="font-size: 1.2rem;">🪣</span>
+                Relleno
+              </button>
+            </div>
+            <div class="brush-list">
+              <div class="brush-item active brush-trigo" onclick="selectCrop('trigo')">
+                <div class="brush-color"></div>
+                <div class="brush-info">
+                  <div class="brush-name">Trigo</div>
+                  <div class="brush-key">Tecla: 1</div>
+                </div>
+              </div>
+              <div class="brush-item brush-papa" onclick="selectCrop('papa')">
+                <div class="brush-color"></div>
+                <div class="brush-info">
+                  <div class="brush-name">Papa (Patata)</div>
+                  <div class="brush-key">Tecla: 2</div>
+                </div>
+              </div>
+              <div class="brush-item brush-zanahoria" onclick="selectCrop('zanahoria')">
+                <div class="brush-color"></div>
+                <div class="brush-info">
+                  <div class="brush-name">Zanahoria</div>
+                  <div class="brush-key">Tecla: 3</div>
+                </div>
+              </div>
+              <div class="brush-item brush-beetroot" onclick="selectCrop('beetroot')">
+                <div class="brush-color"></div>
+                <div class="brush-info">
+                  <div class="brush-name">Remolacha</div>
+                  <div class="brush-key">Tecla: 4</div>
+                </div>
+              </div>
+              <div class="brush-item brush-null" onclick="selectCrop(null)">
+                <div class="brush-color"></div>
+                <div class="brush-info">
+                  <div class="brush-name">Ninguno (Null / Agua)</div>
+                  <div class="brush-key">Tecla: 5 / Click derecho</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Estadísticas de Siembra</div>
+            <div class="stats-list">
+              <div class="stat-row">
+                <div class="stat-name-container">
+                  <div class="stat-color-dot stat-trigo"></div>
+                  <span>Trigo:</span>
+                </div>
+                <span class="stat-val" id="stat-count-trigo">0</span>
+              </div>
+              <div class="stat-row">
+                <div class="stat-name-container">
+                  <div class="stat-color-dot stat-papa"></div>
+                  <span>Papa:</span>
+                </div>
+                <span class="stat-val" id="stat-count-papa">0</span>
+              </div>
+              <div class="stat-row">
+                <div class="stat-name-container">
+                  <div class="stat-color-dot stat-zanahoria"></div>
+                  <span>Zanahoria:</span>
+                </div>
+                <span class="stat-val" id="stat-count-zanahoria">0</span>
+              </div>
+              <div class="stat-row">
+                <div class="stat-name-container">
+                  <div class="stat-color-dot stat-beetroot"></div>
+                  <span>Remolacha:</span>
+                </div>
+                <span class="stat-val" id="stat-count-beetroot">0</span>
+              </div>
+              <div class="stat-row">
+                <div class="stat-name-container">
+                  <div class="stat-color-dot stat-null"></div>
+                  <span>Null (Vacío):</span>
+                </div>
+                <span class="stat-val" id="stat-count-null">0</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">Acciones Rápidas</div>
+            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+              <button class="btn btn-secondary" style="width: 100%; justify-content: center;" onclick="generateProcedural()">
+                Generar Patrón Original
+              </button>
+              <button class="btn btn-danger" style="width: 100%; justify-content: center;" onclick="clearAllToNull()">
+                Limpiar Todo (Vaciar)
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="editor-container">
+          <div class="grid-wrapper">
+            <div class="farm-grid" id="grid"></div>
+          </div>
+
+          <div class="info-bar">
+            <div class="coordinate-display">
+              Matriz: Fila <span id="info-row">-</span>, Col <span id="info-col">-</span>
+            </div>
+            <div class="coordinate-display">
+              Juego: X: <span id="info-x">-</span>, Z: <span id="info-z">-</span>
+            </div>
+            <div class="coordinate-display">
+              Cultivo: <span id="info-crop">-</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="toast" class="toast">✔️ Guardado con éxito</div>
+
+  <script src="app.js"></script>
+</body>
+</html>

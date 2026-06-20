@@ -31,7 +31,7 @@ Estos comandos son válidos para cualquier bot sin importar su profesión actual
 
 Para controlar a los bots debes seguir estos dos pasos:
 
-1. **Asignar la Profesión:** Envía el comando `cultivador`, `talador` o `minero`. El bot cambiará de profesión en caliente, guardará su nueva profesión en la configuración [bots_config.json](file:///c:/Users/Mateo/OneDrive%20-%20Universidad%20T%C3%A9cnica%20Federico%20Santa%20Mar%C3%ADa/minecraft-bots/bots_config.json) y se detendrá (quedará inactivo).
+1. **Asignar la Profesión:** Envía el comando `cultivador`, `talador` o `minero`. El bot cambiará de profesión en caliente, guardará su nueva profesión en la configuración [bots_config.json](file:///c:/Users/Mateo/OneDrive%20-%20Universidad%20T%C3%A9cnica%20Federico%20Santa%20Mar%C3%ADa/minecraft-bots/bots/bots_config.json) y se detendrá (quedará inactivo).
 2. **Ordenar Trabajar:** Envía el comando `trabaja`. El bot comenzará la tarea asociada a su profesión.
 
 *Nota: Si el bot es reiniciado, recordará su profesión y si estaba trabajando previamente, reanudará sus tareas automáticamente.*
@@ -113,5 +113,5 @@ El bot detecta de manera inteligente si tiene suficiente alimento en su inventar
 
 ## 🗃️ Red de Almacenamiento Compartido (`sharedChests`)
 
-Todos los cofres específicos de cultivos (`papas`, `trigo`, `semillas`, `zanahorias`) y de madera (`leña` / `madera`) se guardan de forma **global y compartida** en el archivo [bots_config.json](file:///c:/Users/Mateo/OneDrive%20-%20Universidad%20T%C3%A9cnica%20Federico%20Santa%20Mar%C3%ADa/minecraft-bots/bots_config.json).
+Todos los cofres específicos de cultivos (`papas`, `trigo`, `semillas`, `zanahorias`) y de madera (`leña` / `madera`) se guardan de forma **global y compartida** en el archivo [bots_config.json](file:///c:/Users/Mateo/OneDrive%20-%20Universidad%20T%C3%A9cnica%20Federico%20Santa%20Mar%C3%ADa/minecraft-bots/bots/bots_config.json).
 Cualquier bot que configure uno de estos cofres actualizará la posición para toda la red de bots de forma instantánea.

@@ -355,6 +355,7 @@ async function harvestVein(startBlockPos) {
   visited.add(startBlockPos.toString());
   
   let blocksMined = 0;
+  const minedPositions = [];
   
   while (queue.length > 0 && blocksMined < 25) {
     const currentPos = queue.shift();
@@ -367,6 +368,7 @@ async function harvestVein(startBlockPos) {
         continue;
       }
       blocksMined++;
+      minedPositions.push(currentPos.clone());
       
       const neighbors = [
         currentPos.offset(1, 0, 0),
@@ -388,6 +390,22 @@ async function harvestVein(startBlockPos) {
             }
           }
         }
+      }
+    }
+  }
+
+  // After mining the vein, fill any holes left in the floor/subfloor
+  const referenceY = miningState.startPos ? miningState.startPos.y : bot.entity.position.floored().y;
+  const belowFloorPositions = minedPositions.filter(p => p.y < referenceY);
+  
+  if (belowFloorPositions.length > 0) {
+    console.log(`[Miner] Rellenando ${belowFloorPositions.length} bloques de mineral excavados bajo el suelo.`);
+    // Sort ascending by Y (lowest first) to build from bottom to top
+    belowFloorPositions.sort((a, b) => a.y - b.y);
+    for (const p of belowFloorPositions) {
+      const block = bot.blockAt(p);
+      if (!block || block.name === 'air' || block.name.includes('water') || block.name.includes('lava')) {
+        await placeBlockAt(p);
       }
     }
   }
@@ -834,7 +852,7 @@ async function restockPickaxes(force = false) {
   }
 }
 
-async function manualWalk(targetPos, timeoutMs = 3000) {
+async function manualWalk(targetPos, timeoutMs = 5000) {
   console.log(`[Miner] Intentando caminata manual a ${targetPos}...`);
   const start = Date.now();
   bot.pathfinder.setGoal(null);
@@ -843,21 +861,88 @@ async function manualWalk(targetPos, timeoutMs = 3000) {
   await bot.lookAt(targetPos.offset(0.5, 0.5, 0.5));
   bot.setControlState('forward', true);
   
+  let lastPos = bot.entity.position.clone();
+  let lastMoveTime = Date.now();
+  let backedUp = false;
+  
   return new Promise((resolve) => {
-    const interval = setInterval(() => {
-      const dist = bot.entity.position.distanceTo(targetPos.offset(0.5, 0.5, 0.5));
+    const interval = setInterval(async () => {
+      if (!bot || !bot.entity) {
+        clearInterval(interval);
+        resolve(false);
+        return;
+      }
+      
+      const currentPos = bot.entity.position;
+      const dist = currentPos.distanceTo(targetPos.offset(0.5, 0.5, 0.5));
+      
       if (dist <= 0.8) {
         clearInterval(interval);
         bot.setControlState('forward', false);
+        bot.setControlState('back', false);
         console.log(`[Miner] Caminata manual completada (distancia: ${dist.toFixed(2)}m)`);
         resolve(true);
-      } else if (Date.now() - start > timeoutMs) {
+        return;
+      }
+      
+      if (Date.now() - start > timeoutMs) {
         clearInterval(interval);
         bot.setControlState('forward', false);
+        bot.setControlState('back', false);
         console.log(`[Miner] Tiempo de espera agotado en caminata manual (distancia: ${dist.toFixed(2)}m)`);
         resolve(false);
-      } else {
-        // Keep looking at target in case bot turned
+        return;
+      }
+      
+      // Stuck check (moved < 0.1m in 800ms)
+      const movedDist = currentPos.distanceTo(lastPos);
+      if (movedDist > 0.1) {
+        lastPos = currentPos.clone();
+        lastMoveTime = Date.now();
+      } else if (Date.now() - lastMoveTime > 800 && !backedUp) {
+        backedUp = true;
+        console.log(`[Miner] Atascado en caminata manual. Intentando retroceder, limpiar bloques y atacar entidades en ${targetPos}...`);
+        bot.setControlState('forward', false);
+        bot.setControlState('back', true);
+        
+        setTimeout(async () => {
+          if (!bot) return;
+          bot.setControlState('back', false);
+          
+          // Re-dig target blocks
+          const feetBlock = bot.blockAt(targetPos);
+          const headBlock = bot.blockAt(targetPos.offset(0, 1, 0));
+          if (feetBlock && feetBlock.name !== 'air') {
+            await digBlock(feetBlock);
+          }
+          if (headBlock && headBlock.name !== 'air') {
+            await digBlock(headBlock);
+          }
+          
+          // Attack any blocking entity
+          try {
+            const entity = bot.nearestEntity(e => e.position.distanceTo(bot.entity.position) < 3 && e.type !== 'player');
+            if (entity) {
+              console.log(`[Miner] Atacando entidad cercana para abrir paso: ${entity.name}`);
+              await bot.attack(entity);
+            }
+          } catch (err) {
+            console.log(`[Miner] Error al atacar entidad: ${err.message}`);
+          }
+          
+          // Resume forward movement
+          try {
+            await bot.lookAt(targetPos.offset(0.5, 0.5, 0.5));
+            bot.setControlState('forward', true);
+          } catch (err) {}
+          
+          lastPos = bot.entity.position.clone();
+          lastMoveTime = Date.now();
+          backedUp = false;
+        }, 400);
+      }
+      
+      if (!backedUp) {
         bot.lookAt(targetPos.offset(0.5, 0.5, 0.5)).catch(() => {});
       }
     }, 100);
@@ -1060,6 +1145,73 @@ async function returnToTunnelNode(nodePos) {
   await walkTunnel(miningState.startPos, nodePos);
 }
 
+async function recoverFromFall() {
+  if (!miningState.startPos) return;
+  const targetY = miningState.startPos.y;
+  
+  let currentPos = bot.entity.position.floored();
+  if (currentPos.y >= targetY) return;
+  
+  console.log(`[Miner Recovery] El bot ha caído a Y = ${currentPos.y} (esperado: >= ${targetY}). Iniciando recuperación...`);
+  sendOwnerMsg(`[Miner] He caído a nivel Y = ${currentPos.y}. Intentando subir al nivel de minado Y = ${targetY}...`);
+  
+  // Disable pathfinder while recovering
+  bot.pathfinder.setGoal(null);
+  
+  let attempts = 0;
+  while (bot.entity.position.y < targetY - 0.1 && attempts < 10) {
+    attempts++;
+    const botPos = bot.entity.position.clone();
+    const feetPos = botPos.floored();
+    
+    // Check if there is a block in the head/above head space that would block jumping
+    const headBlock = bot.blockAt(feetPos.offset(0, 2, 0));
+    if (headBlock && headBlock.name !== 'air' && headBlock.boundingBox !== 'empty') {
+      console.log(`[Miner Recovery] Excavando techo en ${headBlock.position} para poder saltar.`);
+      await digBlock(headBlock);
+    }
+    
+    // Equip filler block
+    let filler = bot.inventory.items().find(item => SOLID_FILLER_BLOCKS.includes(item.name));
+    if (!filler) {
+      filler = bot.inventory.items().find(item => FILLER_BLOCKS.includes(item.name));
+    }
+    if (!filler) {
+      sendOwnerMsg('[Miner] ¡No tengo bloques de relleno en inventario para recuperarme de la caída! Por favor, colócame bloques o sácame.');
+      break;
+    }
+    
+    // Jump and place block underneath feetPos
+    bot.setControlState('jump', true);
+    await new Promise(r => setTimeout(r, 300));
+    bot.setControlState('jump', false);
+    
+    // Place block under feet
+    await placeBlockAt(feetPos);
+    
+    // Wait for physics to settle
+    await new Promise(r => setTimeout(r, 500));
+    
+    const newPos = bot.entity.position.floored();
+    console.log(`[Miner Recovery] Intento ${attempts}: Posición actual Y = ${newPos.y}`);
+    if (newPos.y > feetPos.y) {
+      console.log(`[Miner Recovery] Subida exitosa a Y = ${newPos.y}`);
+    } else {
+      console.log(`[Miner Recovery] Fallo al subir en el intento ${attempts}. Reintentando...`);
+    }
+  }
+  
+  const finalPos = bot.entity.position.floored();
+  if (finalPos.y >= targetY) {
+    sendOwnerMsg(`[Miner] Recuperación exitosa. Volví al nivel de minado Y = ${finalPos.y}.`);
+  } else {
+    sendOwnerMsg(`[Miner] No pude regresar al nivel de minado automáticamente (Y actual = ${finalPos.y}). Minería pausada.`);
+    isMiningActive = false;
+    miningState.isMining = false;
+    saveBotConfig();
+  }
+}
+
 async function startMiningLoop() {
   if (miningLoopRunning) return;
   miningLoopRunning = true;
@@ -1071,6 +1223,15 @@ async function startMiningLoop() {
         await new Promise(r => setTimeout(r, 1000));
         continue;
       }
+      
+      // Fall recovery check
+      if (miningState.startPos && bot.entity.position.y < miningState.startPos.y - 0.5) {
+        await recoverFromFall();
+        if (!isMiningActive || !miningState.isMining) {
+          break;
+        }
+      }
+      
       const dirVec = directionVectors[miningState.mainDirection];
       const leftDirName = perpendicularLeft(miningState.mainDirection);
       const rightDirName = perpendicularRight(miningState.mainDirection);

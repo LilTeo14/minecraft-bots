@@ -4,34 +4,39 @@ const { Vec3 } = require('vec3');
 let context = {};
 let bot = null;
 let isWorking = false;
+let isDepositing = false;
 let shouldChop = false;
 let woodChestPosition = null;
 let bedPosition = null;
 const ignoredLogs = new Set();
 let loopTimeout = null;
-let stuckInterval = null;
+let chestErrorCooldown = 0;
 
 // Límites del área de tala (Granja de árboles)
 const FARM_LIMITS = {
-  minX: -576,
-  maxX: -557,
-  minZ: 645,
-  maxZ: 677
+  minX: -586,
+  maxX: -531,
+  minZ: 699,
+  maxZ: 742
 };
 
-// Posición de espera dentro de la granja para mantener cargados los chunks
-const WAITING_POSITION = new Vec3(-559, 121, 661);
-
-// Stuck detector variables
-let lastPos = null;
-let stuckTime = 0;
+function getWaitingPosition() {
+  const x = -558;
+  const z = 720;
+  if (!bot) return new Vec3(x, 120, z);
+  for (let y = 140; y >= 60; y--) {
+    const block = bot.blockAt(new Vec3(x, y, z));
+    if (block && block.name !== 'air' && block.name !== 'cave_air' && !block.name.includes('leaves')) {
+      return new Vec3(x, y + 1, z);
+    }
+  }
+  return new Vec3(x, 120, z);
+}
 
 function init(ctx) {
   context = ctx;
   bot = ctx.bot;
   loadBotConfig();
-  if (stuckInterval) clearInterval(stuckInterval);
-  stuckInterval = setInterval(checkStuck, 500);
 }
 
 function onSpawn() {
@@ -46,10 +51,6 @@ function onDeath() {
 function onEnd() {
   isWorking = false;
   if (loopTimeout) clearTimeout(loopTimeout);
-  if (stuckInterval) {
-    clearInterval(stuckInterval);
-    stuckInterval = null;
-  }
 }
 
 function sendOwnerMsg(msg, force = false) {
@@ -124,10 +125,18 @@ async function depositToChest() {
     return;
   }
 
+  // Short delay to ensure bot is fully stopped before opening the chest
+  await new Promise(r => setTimeout(r, 500));
+
   const chestBlock = bot.blockAt(targetChestPosition);
   if (!chestBlock || !chestBlock.name.includes('chest')) {
     sendOwnerMsg(`[Chest] El bloque en ${targetChestPosition} no es un cofre o no está cargado.`);
     return;
+  }
+
+  const blockAbove = bot.blockAt(targetChestPosition.offset(0, 1, 0));
+  if (blockAbove && blockAbove.boundingBox !== 'empty' && blockAbove.name !== 'air' && blockAbove.name !== 'cave_air') {
+    sendOwnerMsg(`[Chest] ¡ADVERTENCIA! El cofre en ${targetChestPosition} está obstruido por "${blockAbove.name}" en la posición superior ${targetChestPosition.offset(0, 1, 0)}. Por favor, quita el bloque para que el bot pueda abrirlo.`, true);
   }
 
   try {
@@ -145,35 +154,59 @@ async function depositToChest() {
       }
     }
 
-    for (const item of items) {
-      if (isLogBlock(item) || item.name === 'apple') {
+    let depositTarget = null;
+    do {
+      const currentItems = bot.inventory.items();
+      depositTarget = null;
+
+      const currentSaplingCounts = {};
+      for (const item of currentItems) {
+        if (isSaplingItem(item)) {
+          currentSaplingCounts[item.name] = (currentSaplingCounts[item.name] || 0) + item.count;
+        }
+      }
+
+      for (const item of currentItems) {
+        if (item.name.includes('axe')) {
+          if (isAxeLowDurability(item)) {
+            depositTarget = { type: item.type, name: item.name, count: item.count, reason: 'hacha con baja durabilidad' };
+            break;
+          }
+          continue;
+        }
+
+        if (isSaplingItem(item)) {
+          const totalCount = currentSaplingCounts[item.name] || 0;
+          if (totalCount > 10) {
+            const excess = totalCount - 10;
+            const amountToDeposit = Math.min(item.count, excess);
+            if (amountToDeposit > 0) {
+              depositTarget = { type: item.type, name: item.name, count: amountToDeposit, reason: 'exceso de saplings' };
+              break;
+            }
+          }
+        } else {
+          depositTarget = { type: item.type, name: item.name, count: item.count };
+          break;
+        }
+      }
+
+      if (depositTarget) {
         try {
-          console.log(`[Chest] Depositando ${item.count} de ${item.name}...`);
-          await chest.deposit(item.type, null, item.count);
+          if (depositTarget.reason) {
+            console.log(`[Chest] Depositando ${depositTarget.count} de ${depositTarget.name} (${depositTarget.reason})...`);
+          } else {
+            console.log(`[Chest] Depositando ${depositTarget.count} de ${depositTarget.name}...`);
+          }
+          await chest.deposit(depositTarget.type, null, depositTarget.count);
           depositedAny = true;
           await new Promise(r => setTimeout(r, 200));
         } catch (err) {
-          console.log(`[Chest] Error al depositar ${item.name}: ${err.message}`);
-        }
-      } else if (isSaplingItem(item)) {
-        const totalCount = saplingCounts[item.name];
-        if (totalCount > 10) {
-          const excess = totalCount - 10;
-          const amountToDeposit = Math.min(item.count, excess);
-          if (amountToDeposit > 0) {
-            try {
-              console.log(`[Chest] Depositando ${amountToDeposit} de ${item.name} (exceso de 10)...`);
-              await chest.deposit(item.type, null, amountToDeposit);
-              depositedAny = true;
-              saplingCounts[item.name] -= amountToDeposit;
-              await new Promise(r => setTimeout(r, 200));
-            } catch (err) {
-              console.log(`[Chest] Error al depositar ${item.name}: ${err.message}`);
-            }
-          }
+          console.log(`[Chest] Error al depositar ${depositTarget.name}: ${err.message}`);
+          break; // Stop loop on failure to prevent infinite loop
         }
       }
-    }
+    } while (depositTarget);
 
     // Recalcular saplings en el inventario tras los depósitos
     const currentItems = bot.inventory.items();
@@ -217,6 +250,8 @@ async function depositToChest() {
     }
   } catch (err) {
     sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre: ${err.message}`);
+    chestErrorCooldown = Date.now() + 60000;
+    sendOwnerMsg('[Chest] Se pausarán los intentos de depósito en cofre por 60 segundos.');
   }
 }
 
@@ -293,52 +328,6 @@ async function clearObstructingBlock(targetBlock) {
   return false;
 }
 
-function checkStuck() {
-  if (!bot || !bot.entity || !bot.pathfinder || !bot.pathfinder.goal) {
-    lastPos = null;
-    stuckTime = 0;
-    return;
-  }
-
-  const currentPos = bot.entity.position;
-  if (lastPos && currentPos.distanceTo(lastPos) < 0.2) {
-    stuckTime += 500;
-    if (stuckTime >= 2000) {
-      stuckTime = 0;
-
-      const yaw = bot.entity.yaw;
-      const dir = new Vec3(-Math.sin(yaw), 0, -Math.cos(yaw)).normalize();
-
-      const checkOffsets = [
-        new Vec3(0, 0, 0),
-        new Vec3(0, 1, 0),
-        new Vec3(0, 2, 0)
-      ];
-
-      for (const offset of checkOffsets) {
-        const checkPos = bot.entity.position.plus(dir).offset(0, offset.y, 0).floored();
-        const block = bot.blockAt(checkPos);
-        if (block && (block.name.includes('leaves') || block.name.includes('grass') || block.name.includes('vine') || block.name.includes('fern') || block.name.includes('bush'))) {
-          console.log(`[Chopper] Rompiendo obstáculo atascado: ${block.name} en ${checkPos}`);
-          const currentGoal = bot.pathfinder.goal;
-          bot.pathfinder.setGoal(null);
-
-          bot.dig(block)
-            .then(() => {
-              bot.pathfinder.setGoal(currentGoal);
-            })
-            .catch(() => {
-              bot.pathfinder.setGoal(currentGoal);
-            });
-          break;
-        }
-      }
-    }
-  } else {
-    lastPos = currentPos.clone();
-    stuckTime = 0;
-  }
-}
 
 function configureMovements(movements) {
   movements.canDig = true; // Allow digging leaves/grass to pass through
@@ -412,6 +401,13 @@ function isSaplingItem(item) {
   return name.endsWith('_sapling') || name === 'mangrove_propagule' || name === 'azalea' || name === 'flowering_azalea';
 }
 
+function isAxeLowDurability(item) {
+  if (!item || !item.name.includes('axe')) return false;
+  if (item.maxDurability === undefined || item.maxDurability === null) return false;
+  const remaining = item.maxDurability - (item.durabilityUsed || 0);
+  return remaining <= 10;
+}
+
 async function startLumberjackLoop() {
   if (isWorking) return;
   isWorking = true;
@@ -430,7 +426,7 @@ async function lumberjackCycle() {
   if (!shouldChop) return;
   if (bot.isSleeping || bot.isGoingToSleep || bot.isYielding) return;
 
-  if (woodChestPosition && countWood() >= 10) {
+  if (woodChestPosition && countWood() >= 32 && Date.now() > chestErrorCooldown) {
     await depositToChest();
     return;
   }
@@ -484,10 +480,11 @@ async function lumberjackCycle() {
 
     // Si está lejos de la granja, camina a la posición de espera para mantener cargada el área
     const currentPos = bot.entity.position;
-    if (currentPos && currentPos.distanceTo(WAITING_POSITION) > 4) {
-      console.log(`[Chopper] Moviéndose a la posición de espera en la granja: ${WAITING_POSITION}`);
+    const waitingPos = getWaitingPosition();
+    if (currentPos && currentPos.distanceTo(waitingPos) > 4) {
+      console.log(`[Chopper] Moviéndose a la posición de espera en la granja: ${waitingPos}`);
       bot.pathfinder.setGoal(null);
-      await context.goToBase(WAITING_POSITION, 2, 10000, configureMovements);
+      await context.goToBase(waitingPos, 2, 10000, configureMovements);
     }
 
     // Mirar al frente (horizontal) para no quedarse mirando al cielo
@@ -631,6 +628,9 @@ async function equipBestAxe() {
 
   for (const item of items) {
     if (AXE_TIERS[item.name] && AXE_TIERS[item.name] > bestValue) {
+      if (isAxeLowDurability(item)) {
+        continue;
+      }
       bestValue = AXE_TIERS[item.name];
       bestAxe = item;
     }
@@ -643,6 +643,11 @@ async function equipBestAxe() {
     } catch (err) {
       console.log(`[Inventory] No se pudo equipar hacha: ${err.message}`);
     }
+  } else {
+    const hasLowDurabilityAxe = items.some(item => item.name.includes('axe'));
+    if (hasLowDurabilityAxe) {
+      sendOwnerMsg('[Inventory] ¡ADVERTENCIA! Mis hachas tienen baja durabilidad y no las usaré para evitar que se rompan. Por favor, dame un hacha nueva o repara mis hachas.', true);
+    }
   }
 }
 
@@ -654,7 +659,7 @@ async function pickupDrops(soilPos) {
 
   let search = true;
   while (search) {
-    if (bot.isGoingToSleep || bot.isSleeping) break;
+    if (bot.isGoingToSleep || bot.isSleeping || isDepositing) break;
     const itemEntity = bot.nearestEntity(entity => {
       if (entity.name !== 'item' && entity.type !== 'object') return false;
       const dist = entity.position.distanceTo(soilPos);
@@ -668,7 +673,10 @@ async function pickupDrops(soilPos) {
       bot.pathfinder.setGoal(null);
 
       try {
-        await context.goToBase(itemEntity.position, 0.5, 10000, configureMovements);
+        const reached = await context.goToBase(itemEntity.position, 0.5, 10000, configureMovements);
+        if (!reached || isDepositing) {
+          break;
+        }
         await new Promise(r => setTimeout(r, 500));
       } catch (err) {
         console.log(`[Chopper] Error al recoger item: ${err.message}`);
@@ -783,8 +791,20 @@ function onChat(message, isWhisper = false) {
     bot.stopDigging();
     sendOwnerMsg('Modo talador detenido.', true);
   } else if (msg === 'guarda') {
-    sendOwnerMsg('Iniciando depósito manual de madera...', true);
-    depositToChest();
+    if (isDepositing) {
+      sendOwnerMsg('Ya estoy guardando la madera en este momento.', true);
+    } else {
+      isDepositing = true;
+      sendOwnerMsg('Iniciando depósito manual de madera...', true);
+      bot.pathfinder.setGoal(null);
+      bot.stopDigging();
+      const oldShouldChop = shouldChop;
+      shouldChop = false;
+      depositToChest().finally(() => {
+        shouldChop = oldShouldChop;
+        isDepositing = false;
+      });
+    }
   } else if (msg.startsWith('cofre ')) {
     const parts = msg.split(/\s+/);
     if (parts.length === 5) {

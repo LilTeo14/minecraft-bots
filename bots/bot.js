@@ -47,9 +47,16 @@ try {
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const { Vec3 } = require('vec3');
-require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+
+// Load env variables from root directory since bot script was moved to bots/
+const dotenvPath = path.join(__dirname, '..', '.env');
+if (fs.existsSync(dotenvPath)) {
+  require('dotenv').config({ path: dotenvPath });
+} else {
+  require('dotenv').config();
+}
 
 process.on('uncaughtException', (err) => {
   console.error('[CRITICAL] Uncaught Exception:', err);
@@ -781,41 +788,6 @@ async function digBlock(block) {
   }
 }
 
-function optimizePathForCorners(path) {
-  if (!path || path.length < 3) return;
-
-  const originals = path.map(node => ({ x: node.x, y: node.y, z: node.z }));
-  const offset = 0.20;
-
-  for (let i = 1; i < path.length - 1; i++) {
-    const prev = originals[i - 1];
-    const curr = originals[i];
-    const next = originals[i + 1];
-
-    if (prev.y === curr.y && curr.y === next.y) {
-      const dx1 = curr.x - prev.x;
-      const dz1 = curr.z - prev.z;
-      const dx2 = next.x - curr.x;
-      const dz2 = next.z - curr.z;
-
-      const len1 = Math.sqrt(dx1 * dx1 + dz1 * dz1);
-      const len2 = Math.sqrt(dx2 * dx2 + dz2 * dz2);
-
-      if (len1 > 0.1 && len2 > 0.1) {
-        const u1_x = dx1 / len1;
-        const u1_z = dz1 / len1;
-        const u2_x = dx2 / len2;
-        const u2_z = dz2 / len2;
-
-        const dot = u1_x * u2_x + u1_z * u2_z;
-        if (dot < 0.99) {
-          path[i].x += u1_x * offset;
-          path[i].z += u1_z * offset;
-        }
-      }
-    }
-  }
-}
 
 function createBot() {
   console.log(`[System] Conectando a ${options.host}:${options.port} como ${options.username}...`);
@@ -824,19 +796,6 @@ function createBot() {
   bot.loadPlugin(pathfinder);
 
   bot.once('inject_allowed', () => {
-    // Wrap setControlState to force jumping in water
-    const originalSetControlState = bot.setControlState;
-    bot.setControlState = (control, state) => {
-      if (control === 'jump') {
-        const feetBlock = bot.entity ? bot.blockAt(bot.entity.position) : null;
-        const inWater = bot.entity && (bot.entity.isInWater || (feetBlock && feetBlock.name.includes('water')));
-        if (inWater) {
-          return originalSetControlState.call(bot, 'jump', true);
-        }
-      }
-      return originalSetControlState.call(bot, control, state);
-    };
-
     // Intercept pathfinder calls to block them when going to sleep
     const originalSetGoal = bot.pathfinder.setGoal;
     const originalGoto = bot.pathfinder.goto;
@@ -860,17 +819,11 @@ function createBot() {
     };
   });
 
-  let lastPosition = null;
-  let lastPositionTime = Date.now();
-  let jumpTimeout = null;
-  let isJumpingToUnstuck = false;
   let lastSpawnTime = 0;
   let preventReconnect = false;
 
   bot.on('path_update', (results) => {
     if (results && results.path) {
-      // Corner optimization is disabled for all bots as it causes them to collide with corners/walls.
-      // optimizePathForCorners(results.path);
       bot.pathfinder.currentPath = results.path;
       console.log(`[Path Debug] "${options.username}" path length: ${results.path.length}. First 5 nodes: ${
         results.path.slice(0, 5).map(node => `(${node.x.toFixed(1)}, ${node.y.toFixed(1)}, ${node.z.toFixed(1)})`).join(' -> ')
@@ -886,151 +839,55 @@ function createBot() {
       console.log(`[Heartbeat] Bot "${options.username}" at ${bot.entity?.position?.toString()}, isMoving: ${bot.pathfinder?.isMoving()}, time: ${bot.time ? bot.time.timeOfDay : 'undefined'}, isNight: ${bot.time ? bot.time.isNight : 'undefined'}`);
       lastHeartbeat = now;
     }
-
-    // Auto swim when in water to prevent getting stuck
-    let inWater = false;
-    if (bot.entity) {
-      const feetBlock = bot.blockAt(bot.entity.position);
-      inWater = bot.entity.isInWater || (feetBlock && feetBlock.name.includes('water'));
-      if (inWater) {
-        bot.setControlState('jump', true);
-      }
-    }
-
-    // Proactive climb jump fix for Mineflayer 1.21 physics bug
-    if (bot.entity && bot.pathfinder && bot.pathfinder.isMoving()) {
-      const path = bot.pathfinder.currentPath;
-      const nextNode = path && path.length > 0 ? path[0] : null;
-      if (nextNode) {
-        const currentY = bot.entity.position.y;
-        if (nextNode.y > currentY + 0.1) {
-          const dx = nextNode.x - bot.entity.position.x;
-          const dz = nextNode.z - bot.entity.position.z;
-          const dist2D = Math.sqrt(dx * dx + dz * dz);
-          if (dist2D < 1.5) {
-            bot.setControlState('jump', true);
-          } else if (!inWater) {
-            bot.setControlState('jump', false);
-          }
-        } else if (!inWater) {
-          bot.setControlState('jump', false);
-        }
-      }
-    }
-
-    // Cooperative collision avoidance when bots are colliding
-    if (bot.entity && bot.pathfinder && bot.pathfinder.isMoving() && !bot.isYielding) {
-      const nearbyBots = Object.values(bot.entities).filter(entity => {
-        if (entity.type === 'player' && entity.username !== bot.username) {
-          const nameLower = entity.username.toLowerCase();
-          return nameLower.includes('cosechador') || nameLower.includes('tala') || nameLower.includes('minero') || nameLower.includes('criador') || nameLower.includes('rellenador');
-        }
-        return false;
-      });
-
-      const collidingBot = nearbyBots.find(eb => bot.entity.position.distanceTo(eb.position) < 1.2);
-      if (collidingBot && bot.username > collidingBot.username) {
-        console.log(`[Collision Avoidance] Bot "${bot.username}" cede el paso a "${collidingBot.username}" por colisión de entidades.`);
-        bot.isYielding = true;
-        bot.pathfinder.setGoal(null);
-        bot.clearControlStates();
-        
-        // Nudge away from the other bot to break physical lock
-        const diff = bot.entity.position.minus(collidingBot.position).normalize().scaled(0.5);
-        bot.entity.position.x += diff.x;
-        bot.entity.position.z += diff.z;
-
-        setTimeout(() => {
-          bot.isYielding = false;
-          console.log(`[Collision Avoidance] Bot "${bot.username}" reanuda actividades.`);
-        }, 4000);
-      }
-    }
-
-    if (bot.targetDigBlock) {
-      lastPosition = null;
-      return;
-    }
-
-    if (!bot.pathfinder || !bot.pathfinder.isMoving()) {
-      if (bot.pathfinder) bot.pathfinder.currentPath = null;
-      lastPosition = null;
-      return;
-    }
-
-    if (bot.pathfinder.isMining() || bot.pathfinder.isBuilding()) {
-      lastPosition = null;
-      return;
-    }
-
-    const currentPos = bot.entity?.position;
-    if (!currentPos) return;
-
-    // Center alignment based on next path node to prevent collision with corners/walls
-    // (Disabled to prevent client-server position desynchronization)
-
-    if (!lastPosition) {
-      lastPosition = currentPos.clone();
-      lastPositionTime = now;
-      return;
-    }
-
-    const elapsed = now - lastPositionTime;
-    if (elapsed >= 1000) {
-      const dx = currentPos.x - lastPosition.x;
-      const dz = currentPos.z - lastPosition.z;
-      const dist = Math.sqrt(dx * dx + dz * dz);
-
-      if (dist < 1.0) {
-        const path = bot.pathfinder.currentPath;
-        const feetBlock = bot.blockAt(currentPos);
-        const headBlock = bot.blockAt(currentPos.offset(0, 1, 0));
-        const nextNode = path && path.length > 0 ? path[0] : null;
-        const nextBlock = nextNode ? bot.blockAt(new Vec3(nextNode.x, nextNode.y, nextNode.z)) : null;
-        const belowNextBlock = nextNode ? bot.blockAt(new Vec3(nextNode.x, nextNode.y - 1, nextNode.z)) : null;
-        const nextBlockAbove = nextNode ? bot.blockAt(new Vec3(nextNode.x, nextNode.y + 1, nextNode.z)) : null;
-        
-        console.log(`[Stuck Detector] Bot "${options.username}" está atascado (movió ${dist.toFixed(2)}m en 1s). Destrabando...`);
-        console.log(`[Stuck Diagnostic] Bot at ${currentPos.toString()} -> NextNode: ${nextNode ? `(${nextNode.x.toFixed(1)}, ${nextNode.y.toFixed(1)}, ${nextNode.z.toFixed(1)})` : 'none'}`);
-        console.log(`[Stuck Diagnostic] Blocks - Feet: ${feetBlock?.name}, Head: ${headBlock?.name}, NextNodeBlock: ${nextBlock?.name}, BelowNextBlock: ${belowNextBlock?.name}, NextBlockAbove: ${nextBlockAbove?.name}`);
-        
-        const ceilingBlock = bot.blockAt(currentPos.offset(0, 2, 0));
-        const hasCeiling = ceilingBlock && ceilingBlock.name !== 'air' && ceilingBlock.boundingBox !== 'empty';
-        
-        if (botType !== 'miner' && !hasCeiling) {
-          bot.setControlState('jump', true);
-          bot.setControlState('forward', true);
-        } else {
-          console.log(`[Stuck Detector] Saltando salto de destrabe debido a techo bajo o profesión minero.`);
-        }
-
-        if (jumpTimeout) clearTimeout(jumpTimeout);
-        jumpTimeout = setTimeout(() => {
-          if (bot && bot.setControlState) {
-            bot.setControlState('jump', false);
-            bot.setControlState('forward', false);
-          }
-        }, 350);
-      }
-
-      lastPosition = currentPos.clone();
-      lastPositionTime = now;
-    }
   });
 
   bot.on('spawn', () => {
     lastSpawnTime = Date.now();
     console.log(`[System] Bot "${options.username}" ha aparecido en el juego.`);
-    sendOwnerMsg('[System] Bot ha aparecido en el juego.', true);
     mcData = require('minecraft-data')(bot.version);
 
-
-    if (bot.version && bot.version.startsWith('1.21')) {
-      setTimeout(() => {
-        bot.chat(`/attribute ${bot.username} minecraft:generic.scale base set 0.9999999`);
-        console.log(`[System] Aplicado comando de escala para corregir salto/escalada en 1.21.`);
-      }, 1000);
+    // Start Prismarine Viewer if configured
+    const currentConf = getConfig();
+    if (currentConf.viewerPort) {
+      console.log(`[System] Iniciando Prismarine Viewer para "${options.username}" en el puerto ${currentConf.viewerPort}...`);
+      try {
+        const mineflayerViewer = require('prismarine-viewer').mineflayer;
+        mineflayerViewer(bot, { port: parseInt(currentConf.viewerPort), firstPerson: true, viewDistance: 2 });
+        console.log(`[System] Prismarine Viewer iniciado con éxito en http://localhost:${currentConf.viewerPort}`);
+      } catch (err) {
+        console.error(`[System] Error al iniciar Prismarine Viewer para "${options.username}":`, err.message);
+      }
     }
+
+    // Track and log inventory updates to logs/bot_<Name>_inventory.json
+    let invTimeout = null;
+    function queueInventoryWrite() {
+      if (invTimeout) return;
+      invTimeout = setTimeout(() => {
+        invTimeout = null;
+        try {
+          const logsDir = path.join(__dirname, 'logs');
+          if (!fs.existsSync(logsDir)) {
+            fs.mkdirSync(logsDir);
+          }
+          const invPath = path.join(logsDir, `bot_${botName}_inventory.json`);
+          const items = bot.inventory.items().map(item => ({
+            name: item.name,
+            displayName: item.displayName || item.name,
+            count: item.count,
+            slot: item.slot
+          }));
+          fs.writeFileSync(invPath, JSON.stringify(items, null, 2), 'utf8');
+        } catch (err) {
+          console.error(`[Inventory Log] Error:`, err.message);
+        }
+      }, 500);
+    }
+
+    bot.inventory.on('updateSlot', queueInventoryWrite);
+    queueInventoryWrite();
+
+
 
     const context = {
       bot,

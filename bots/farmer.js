@@ -4,6 +4,7 @@ const { Vec3 } = require('vec3');
 let context = {};
 let bot = null;
 let isWorking = false;
+let isDepositing = false;
 let shouldFarm = false;
 let potatoChestPosition = null;
 let wheatChestPosition = null;
@@ -509,7 +510,7 @@ async function pickupDrops(harvestPos) {
   let sameItemCount = 0;
 
   while (search && attempts < 10) {
-    if (bot.isGoingToSleep || bot.isSleeping) break;
+    if (bot.isGoingToSleep || bot.isSleeping || isDepositing) break;
     attempts++;
     const itemEntity = bot.nearestEntity(entity => {
       if (entity.name !== 'item' && entity.type !== 'object') return false;
@@ -536,7 +537,10 @@ async function pickupDrops(harvestPos) {
       bot.pathfinder.setGoal(null);
 
       try {
-        await context.goToBase(itemEntity.position, 0.5, 10000, configureMovements);
+        const reached = await context.goToBase(itemEntity.position, 0.5, 10000, configureMovements);
+        if (!reached || isDepositing) {
+          break;
+        }
         await new Promise(r => setTimeout(r, 150));
       } catch (err) {
         console.log(`[Farmer] Error al recoger drop: ${err.message}`);
@@ -675,8 +679,20 @@ function onChat(message, isWhisper = false) {
     bot.stopDigging();
     sendOwnerMsg('Modo cultivador detenido.', true);
   } else if (msg === 'guarda') {
-    sendOwnerMsg('Iniciando depósito manual de cosecha...', true);
-    depositToChest();
+    if (isDepositing) {
+      sendOwnerMsg('Ya estoy guardando la cosecha en este momento.', true);
+    } else {
+      isDepositing = true;
+      sendOwnerMsg('Iniciando depósito manual de cosecha...', true);
+      bot.pathfinder.setGoal(null);
+      bot.stopDigging();
+      const oldShouldFarm = shouldFarm;
+      shouldFarm = false;
+      depositToChest().finally(() => {
+        shouldFarm = oldShouldFarm;
+        isDepositing = false;
+      });
+    }
   } else if (msg.startsWith('cofre ')) {
     const parts = msg.split(/\s+/);
     if (parts.length === 5) {

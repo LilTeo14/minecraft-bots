@@ -1,0 +1,12 @@
+{
+  "name": "minecraft-bots-test-env",
+  "version": "1.0.0",
+  "description": "Downgraded testing environment for mineflayer physical and pathfinding bugs",
+  "main": "test_bot.js",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "mineflayer": "^4.37.1",
+    "mineflayer-pathfinder": "github:invisbleia/mineflayer-pathfinder-1.21.11",
+    "vec3": "^0.1.7"
+  }
+}

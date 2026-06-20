@@ -1,0 +1,22 @@
+{
+  "name": "minecraft-bots",
+  "version": "1.0.0",
+  "description": "Minecraft automated bots using mineflayer and pathfinder",
+  "main": "bot.js",
+  "dependencies": {
+    "canvas": "^3.2.3",
+    "dotenv": "^17.4.2",
+    "minecraft-data": "^3.110.2",
+    "minecraft-protocol": "^1.66.2",
+    "mineflayer": "^4.37.1",
+    "mineflayer-pathfinder": "github:invisbleia/mineflayer-pathfinder-1.21.11",
+    "prismarine-item": "^1.18.0",
+    "prismarine-viewer": "https://github.com/mc-zuri/prismarine-viewer/archive/refs/heads/bugfix/render-below-y-0.tar.gz",
+    "vec3": "^0.1.10"
+  },
+  "devDependencies": {
+    "fs-extra": "^11.3.5",
+    "minecraft-assets": "^1.17.0",
+    "webpack-cli": "^7.0.3"
+  }
+}
