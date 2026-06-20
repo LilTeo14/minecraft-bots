@@ -28,7 +28,7 @@ function switchTab(tabId) {
 
 // Global Bot Manager State
 let botsConfig = {};
-let openBots = new Set();
+let openBots = [];
 
 // ==========================================
 // Arador Editor Matrix Logic
@@ -495,7 +495,7 @@ function renderBotList() {
   botNames.forEach(name => {
     const bot = botsConfig[name];
     const status = botStatuses[name] || 'offline';
-    const isOpen = openBots.has(name);
+    const isOpen = openBots.some(cb => cb.name === name);
     const item = document.createElement('div');
     item.className = `bot-item ${isOpen ? 'active' : ''}`;
     item.onclick = () => toggleBotCard(name);
@@ -518,46 +518,47 @@ function renderBotList() {
 }
 
 function toggleBotCard(name) {
-  if (openBots.has(name)) {
-    closeBotCard(name);
-  } else {
-    openBots.add(name);
-    botSubTabs[name] = 'config'; // Default subtab
-    renderBotDetailsContainer();
-    renderBotList();
-  }
+  const cardId = `${name}_card_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  openBots.push({ id: cardId, name: name });
+  botSubTabs[cardId] = 'config'; // Default subtab
+  renderBotDetailsContainer();
+  renderBotList();
 }
 
-function closeBotCard(name) {
-  openBots.delete(name);
+function closeBotCard(cardId) {
+  openBots = openBots.filter(cb => cb.id !== cardId);
   
-  // Clear intervals for this bot
-  if (pollIntervals[name]) {
-    if (pollIntervals[name].log) clearInterval(pollIntervals[name].log);
-    if (pollIntervals[name].inv) clearInterval(pollIntervals[name].inv);
-    delete pollIntervals[name];
+  // Clear intervals for this bot card
+  if (pollIntervals[cardId]) {
+    if (pollIntervals[cardId].log) clearInterval(pollIntervals[cardId].log);
+    if (pollIntervals[cardId].inv) clearInterval(pollIntervals[cardId].inv);
+    delete pollIntervals[cardId];
   }
-  delete botSubTabs[name];
+  delete botSubTabs[cardId];
 
   renderBotDetailsContainer();
   renderBotList();
 }
 
-function switchSubTab(name, subTab) {
-  botSubTabs[name] = subTab;
+function switchSubTab(cardId, subTab) {
+  const botObj = openBots.find(cb => cb.id === cardId);
+  if (!botObj) return;
+  const name = botObj.name;
+
+  botSubTabs[cardId] = subTab;
   
-  // Clear existing logs/inventory intervals for this bot
-  if (pollIntervals[name]) {
-    if (pollIntervals[name].log) clearInterval(pollIntervals[name].log);
-    if (pollIntervals[name].inv) clearInterval(pollIntervals[name].inv);
-    pollIntervals[name] = { log: null, inv: null };
+  // Clear existing logs/inventory intervals for this card
+  if (pollIntervals[cardId]) {
+    if (pollIntervals[cardId].log) clearInterval(pollIntervals[cardId].log);
+    if (pollIntervals[cardId].inv) clearInterval(pollIntervals[cardId].inv);
+    pollIntervals[cardId] = { log: null, inv: null };
   } else {
-    pollIntervals[name] = { log: null, inv: null };
+    pollIntervals[cardId] = { log: null, inv: null };
   }
 
   // Rerender specific card's main content area without full container rewrite
-  const cardBody = document.getElementById(`bot-card-body-${name}`);
-  const cardSubtabs = document.getElementById(`bot-card-subtabs-${name}`);
+  const cardBody = document.getElementById(`bot-card-body-${cardId}`);
+  const cardSubtabs = document.getElementById(`bot-card-subtabs-${cardId}`);
   if (!cardBody || !cardSubtabs) return;
 
   // Update subtab buttons active class
@@ -594,9 +595,9 @@ function switchSubTab(name, subTab) {
     }
     cardBody.innerHTML = configHtml;
   } else if (subTab === 'inventory') {
-    cardBody.innerHTML = `<div class="inventory-grid" id="bot-inventory-grid-${name}">Cargando inventario...</div>`;
-    fetchInventory(name);
-    pollIntervals[name].inv = setInterval(() => fetchInventory(name), 3000);
+    cardBody.innerHTML = `<div class="inventory-grid" id="bot-inventory-grid-${cardId}">Cargando inventario...</div>`;
+    fetchInventory(name, cardId);
+    pollIntervals[cardId].inv = setInterval(() => fetchInventory(name, cardId), 3000);
   } else if (subTab === 'live') {
     const isOnline = botStatuses[name] && botStatuses[name] !== 'offline';
     const port = bot.viewerPort;
@@ -626,8 +627,8 @@ function switchSubTab(name, subTab) {
             <h3 style="color: var(--text-main); margin-bottom: 0.5rem;">Seleccionar Visualización</h3>
             <p style="font-size: 0.85rem; max-width: 320px; margin-bottom: 1.5rem;">Elige cómo deseas ver la transmisión en vivo. La visualización en Python consume menos memoria en Chrome.</p>
             <div style="display: flex; gap: 1rem; width: 100%; max-width: 320px;">
-              <button class="btn btn-primary" onclick="setLiveViewMode('${name}', 'web')" style="flex: 1; justify-content: center; padding: 0.75rem;">🌐 Vista Web (Iframe)</button>
-              <button class="btn btn-trabaja" onclick="setLiveViewMode('${name}', 'python')" style="flex: 1; justify-content: center; padding: 0.75rem; background: #3b82f6; color: #fff;">🖥️ Ventana Python</button>
+              <button class="btn btn-primary" onclick="setLiveViewMode('${name}', 'web', '${cardId}')" style="flex: 1; justify-content: center; padding: 0.75rem;">🌐 Vista Web (Iframe)</button>
+              <button class="btn btn-trabaja" onclick="setLiveViewMode('${name}', 'python', '${cardId}')" style="flex: 1; justify-content: center; padding: 0.75rem; background: #3b82f6; color: #fff;">🖥️ Ventana Python</button>
             </div>
           </div>
         `;
@@ -638,8 +639,8 @@ function switchSubTab(name, subTab) {
             <h3 style="color: var(--text-main); margin-bottom: 0.5rem;">Transmitiendo en Python</h3>
             <p style="font-size: 0.85rem; max-width: 320px; margin-bottom: 1.5rem;">El bot "${name}" ha sido agregado a la cuadrícula de cámaras de seguridad en la ventana externa de Python.</p>
             <div style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%; max-width: 320px;">
-              <button class="btn btn-primary" onclick="setLiveViewMode('${name}', 'web')" style="justify-content: center; padding: 0.6rem;">🌐 Cambiar a Vista Web (Iframe)</button>
-              <button class="btn btn-danger" onclick="stopPythonLiveView('${name}')" style="justify-content: center; padding: 0.6rem;">✕ Quitar de Ventana Python</button>
+              <button class="btn btn-primary" onclick="setLiveViewMode('${name}', 'web', '${cardId}')" style="justify-content: center; padding: 0.6rem;">🌐 Cambiar a Vista Web (Iframe)</button>
+              <button class="btn btn-danger" onclick="stopPythonLiveView('${name}', '${cardId}')" style="justify-content: center; padding: 0.6rem;">✕ Quitar de Ventana Python</button>
             </div>
           </div>
         `;
@@ -654,7 +655,7 @@ function switchSubTab(name, subTab) {
               <div style="display: flex; align-items: center; gap: 12px;">
                 <div style="display: flex; align-items: center; gap: 6px;">
                   <span style="color: #aaa; font-size: 0.75rem;">Calidad:</span>
-                  <select id="quality-select-${name}" onchange="changeLiveQuality('${name}', this.value)" style="background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; cursor: pointer;">
+                  <select id="quality-select-${cardId}" onchange="changeLiveQuality('${name}', this.value, '${cardId}')" style="background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; cursor: pointer;">
                     <option value="high" ${currentQuality === 'high' ? 'selected' : ''}>Alta</option>
                     <option value="medium" ${currentQuality === 'medium' ? 'selected' : ''}>Media</option>
                     <option value="low" ${currentQuality === 'low' ? 'selected' : ''}>Baja</option>
@@ -663,7 +664,7 @@ function switchSubTab(name, subTab) {
                 </div>
               </div>
             </div>
-            <iframe id="live-iframe-${name}" src="http://${window.location.hostname}:${port}?quality=${currentQuality}" style="flex: 1; border: none; width: 100%; height: calc(100% - 30px);" allowfullscreen></iframe>
+            <iframe id="live-iframe-${cardId}" src="http://${window.location.hostname}:${port}?quality=${currentQuality}" style="flex: 1; border: none; width: 100%; height: calc(100% - 30px);" allowfullscreen></iframe>
             <div class="live-view-overlay" style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; color: #10b981; pointer-events: none;">
               🔴 PUERTO ${port}
             </div>
@@ -674,20 +675,22 @@ function switchSubTab(name, subTab) {
   } else {
     cardBody.innerHTML = `
       <div style="display: flex; flex-direction: column; gap: 0.5rem; width: 100%;">
-        <div class="console-terminal" id="bot-console-log-${name}">Cargando logs...</div>
+        <div class="console-terminal" id="bot-console-log-${cardId}">Cargando logs...</div>
         <div class="console-actions">
-          <button class="btn btn-secondary" onclick="fetchConsoleLogs('${name}')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">🔄 Limpiar / Forzar Carga</button>
+          <button class="btn btn-secondary" onclick="fetchConsoleLogs('${name}', '${cardId}')" style="padding: 0.35rem 0.75rem; font-size: 0.75rem;">🔄 Limpiar / Forzar Carga</button>
         </div>
       </div>
     `;
-    fetchConsoleLogs(name);
-    pollIntervals[name].log = setInterval(() => fetchConsoleLogs(name), 2000);
+    fetchConsoleLogs(name, cardId);
+    pollIntervals[cardId].log = setInterval(() => fetchConsoleLogs(name, cardId), 2000);
   }
 }
 
 function updateOpenCardsUI() {
-  openBots.forEach(name => {
-    const card = document.getElementById(`bot-card-${name}`);
+  openBots.forEach(botObj => {
+    const cardId = botObj.id;
+    const name = botObj.name;
+    const card = document.getElementById(`bot-card-${cardId}`);
     if (!card) return;
     const actionsEl = card.querySelector('.bot-card-actions');
     if (!actionsEl) return;
@@ -755,7 +758,7 @@ function renderBotDetailsContainer() {
   const container = document.getElementById('bot-details-container');
   if (!container) return;
 
-  if (openBots.size === 0) {
+  if (openBots.length === 0) {
     container.style.gridTemplateColumns = '1fr';
     container.innerHTML = `
       <div class="card" style="height: 100%; min-height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
@@ -776,9 +779,9 @@ function renderBotDetailsContainer() {
   }
 
   // Dynamically size columns up to 3 columns max
-  if (openBots.size === 1) {
+  if (openBots.length === 1) {
     container.style.gridTemplateColumns = '1fr';
-  } else if (openBots.size === 2) {
+  } else if (openBots.length === 2) {
     container.style.gridTemplateColumns = 'repeat(2, 1fr)';
   } else {
     container.style.gridTemplateColumns = 'repeat(3, 1fr)';
@@ -787,9 +790,9 @@ function renderBotDetailsContainer() {
   // Remove cards that are no longer open
   const existingCards = container.querySelectorAll('.bot-card-multiview');
   existingCards.forEach(cardEl => {
-    const cardId = cardEl.id;
-    const name = cardId.replace('bot-card-', '');
-    if (!openBots.has(name)) {
+    const cardId = cardEl.id.replace('bot-card-', '');
+    const botObj = openBots.find(cb => cb.id === cardId);
+    if (!botObj) {
       // Release iframe WebGL context/memory before removing
       const iframe = cardEl.querySelector('iframe');
       if (iframe) {
@@ -800,17 +803,19 @@ function renderBotDetailsContainer() {
   });
 
   // Add cards that are open but not yet rendered in DOM
-  openBots.forEach(name => {
-    let card = document.getElementById(`bot-card-${name}`);
+  openBots.forEach(botObj => {
+    const cardId = botObj.id;
+    const name = botObj.name;
+    let card = document.getElementById(`bot-card-${cardId}`);
     if (!card) {
       const bot = botsConfig[name];
       if (!bot) return;
 
-      const subTab = botSubTabs[name] || 'config';
+      const subTab = botSubTabs[cardId] || 'config';
 
       card = document.createElement('div');
       card.className = 'card bot-card-multiview';
-      card.id = `bot-card-${name}`;
+      card.id = `bot-card-${cardId}`;
       card.style.display = 'flex';
       card.style.flexDirection = 'column';
       card.style.alignItems = 'stretch';
@@ -821,26 +826,26 @@ function renderBotDetailsContainer() {
           <div class="bot-details-title">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
               <h2>${name}</h2>
-              <button class="close-card-btn" title="Cerrar Ficha" onclick="closeBotCard('${name}')">✕</button>
+              <button class="close-card-btn" title="Cerrar Ficha" onclick="closeBotCard('${cardId}')">✕</button>
             </div>
             <p>Tipo: ${bot.type || 'desconocido'}</p>
             <div class="bot-quick-cmds"></div>
           </div>
           <div class="bot-card-actions"></div>
         </div>
-        <div class="bot-sub-tabs" id="bot-card-subtabs-${name}">
-          <button class="sub-tab-btn ${subTab === 'config' ? 'active' : ''}" onclick="switchSubTab('${name}', 'config')">Configuración</button>
-          <button class="sub-tab-btn ${subTab === 'console' ? 'active' : ''}" onclick="switchSubTab('${name}', 'console')">Consola</button>
-          <button class="sub-tab-btn ${subTab === 'inventory' ? 'active' : ''}" onclick="switchSubTab('${name}', 'inventory')">Objetos</button>
-          <button class="sub-tab-btn ${subTab === 'live' ? 'active' : ''}" onclick="switchSubTab('${name}', 'live')">Live View</button>
+        <div class="bot-sub-tabs" id="bot-card-subtabs-${cardId}">
+          <button class="sub-tab-btn ${subTab === 'config' ? 'active' : ''}" onclick="switchSubTab('${cardId}', 'config')">Configuración</button>
+          <button class="sub-tab-btn ${subTab === 'console' ? 'active' : ''}" onclick="switchSubTab('${cardId}', 'console')">Consola</button>
+          <button class="sub-tab-btn ${subTab === 'inventory' ? 'active' : ''}" onclick="switchSubTab('${cardId}', 'inventory')">Objetos</button>
+          <button class="sub-tab-btn ${subTab === 'live' ? 'active' : ''}" onclick="switchSubTab('${cardId}', 'live')">Live View</button>
         </div>
-        <div id="bot-card-body-${name}" style="flex: 1; display: flex; flex-direction: column;">
+        <div id="bot-card-body-${cardId}" style="flex: 1; display: flex; flex-direction: column;">
           <!-- Card content inside switchSubTab -->
         </div>
       `;
 
       container.appendChild(card);
-      switchSubTab(name, subTab);
+      switchSubTab(cardId, subTab);
     }
   });
 
@@ -883,12 +888,13 @@ const emojiMap = {
   apple: '🍎'
 };
 
-async function fetchInventory(name) {
+async function fetchInventory(name, cardId) {
   try {
     const response = await fetch(`/api/bots/inventory?name=${name}`);
     if (response.ok) {
       const items = await response.json();
-      const grid = document.getElementById(`bot-inventory-grid-${name}`);
+      const targetId = cardId ? `bot-inventory-grid-${cardId}` : `bot-inventory-grid-${name}`;
+      const grid = document.getElementById(targetId);
       if (!grid) return;
 
       if (!Array.isArray(items) || items.length === 0) {
@@ -923,12 +929,13 @@ async function fetchInventory(name) {
   }
 }
 
-async function fetchConsoleLogs(name) {
+async function fetchConsoleLogs(name, cardId) {
   try {
     const response = await fetch(`/api/bots/logs?name=${name}`);
     if (response.ok) {
       const data = await response.json();
-      const consoleText = document.getElementById(`bot-console-log-${name}`);
+      const targetId = cardId ? `bot-console-log-${cardId}` : `bot-console-log-${name}`;
+      const consoleText = document.getElementById(targetId);
       if (consoleText) {
         const atBottom = consoleText.scrollHeight - consoleText.clientHeight <= consoleText.scrollTop + 40;
         consoleText.textContent = data.logs || 'No hay logs de consola registrados aún.';
@@ -1097,9 +1104,10 @@ statusPollInterval = setInterval(async () => {
   updateOpenCardsUI();
 }, 3000);
 
-window.changeLiveQuality = function(name, quality) {
+window.changeLiveQuality = function(name, quality, cardId) {
   localStorage.setItem(`live-quality-${name}`, quality);
-  const iframe = document.getElementById(`live-iframe-${name}`);
+  const targetId = cardId ? `live-iframe-${cardId}` : `live-iframe-${name}`;
+  const iframe = document.getElementById(targetId);
   if (iframe) {
     try {
       const url = new URL(iframe.src);
@@ -1111,7 +1119,7 @@ window.changeLiveQuality = function(name, quality) {
   }
 };
 
-window.setLiveViewMode = async function(name, mode) {
+window.setLiveViewMode = async function(name, mode, cardId) {
   liveViewModes[name] = mode;
   if (mode === 'python') {
     try {
@@ -1140,10 +1148,14 @@ window.setLiveViewMode = async function(name, mode) {
       });
     } catch (e) {}
   }
-  switchSubTab(name, 'live');
+  if (cardId) {
+    switchSubTab(cardId, 'live');
+  } else {
+    switchSubTab(name, 'live');
+  }
 };
 
-window.stopPythonLiveView = async function(name) {
+window.stopPythonLiveView = async function(name, cardId) {
   try {
     const response = await fetch('/api/python-grid/remove', {
       method: 'POST',
@@ -1153,7 +1165,11 @@ window.stopPythonLiveView = async function(name) {
     if (response.ok) {
       showToast(`✕ ${name} removido de la cuadrícula de Python`);
       liveViewModes[name] = undefined;
-      switchSubTab(name, 'live');
+      if (cardId) {
+        switchSubTab(cardId, 'live');
+      } else {
+        switchSubTab(name, 'live');
+      }
     }
   } catch (e) {
     showToast('❌ Error al remover de Python', true);
