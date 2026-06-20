@@ -655,8 +655,12 @@ async function restockPickaxes(force = false) {
   const currentCarrots = bot.inventory.items().filter(item => item.name === 'carrot').reduce((sum, item) => sum + item.count, 0);
   const carrotsNeeded = Math.max(0, 32 - currentCarrots);
   const excessCarrots = Math.max(0, currentCarrots - 64);
+
+  const currentBread = bot.inventory.items().filter(item => item.name === 'bread').reduce((sum, item) => sum + item.count, 0);
+  const breadNeeded = Math.max(0, 32 - currentBread);
+  const excessBread = Math.max(0, currentBread - 64);
   
-  if (needed <= 0 && torchesNeeded <= 0 && excessPickaxes <= 0 && excessTorches <= 0 && carrotsNeeded <= 0 && excessCarrots <= 0) {
+  if (needed <= 0 && torchesNeeded <= 0 && excessPickaxes <= 0 && excessTorches <= 0 && carrotsNeeded <= 0 && excessCarrots <= 0 && breadNeeded <= 0 && excessBread <= 0) {
     return;
   }
   
@@ -693,6 +697,8 @@ async function restockPickaxes(force = false) {
     let torchesWithdrawn = 0;
     let pickaxesDeposited = 0;
     let torchesDeposited = 0;
+    let breadWithdrawn = 0;
+    let breadDeposited = 0;
     
     // Deposit excess first to free up slots if any
     if (excessPickaxes > 0) {
@@ -744,6 +750,24 @@ async function restockPickaxes(force = false) {
           await new Promise(r => setTimeout(r, 250));
         } catch (err) {
           console.log(`[Miner] Error al depositar exceso de zanahorias: ${err.message}`);
+        }
+      }
+    }
+
+    if (excessBread > 0) {
+      const breadInInv = bot.inventory.items().filter(item => item.name === 'bread');
+      let excess = excessBread;
+      for (const item of breadInInv) {
+        if (excess <= 0) break;
+        try {
+          const amount = Math.min(item.count, excess);
+          console.log(`[Miner] Depositando exceso de pan: ${amount} de ${item.name}`);
+          await chest.deposit(item.type, null, amount);
+          breadDeposited += amount;
+          excess -= amount;
+          await new Promise(r => setTimeout(r, 250));
+        } catch (err) {
+          console.log(`[Miner] Error al depositar exceso de pan: ${err.message}`);
         }
       }
     }
@@ -800,6 +824,24 @@ async function restockPickaxes(force = false) {
         }
       }
     }
+
+    if (breadNeeded > 0) {
+      const breadInChest = updatedChestItems.filter(item => item && item.name === 'bread');
+      let breadToWithdraw = breadNeeded;
+      for (const item of breadInChest) {
+        if (breadToWithdraw <= 0) break;
+        try {
+          const amount = Math.min(item.count, breadToWithdraw);
+          console.log(`[Miner] Sacando pan: ${amount} de ${item.name}`);
+          await chest.withdraw(item.type, null, amount);
+          breadWithdrawn += amount;
+          breadToWithdraw -= amount;
+          await new Promise(r => setTimeout(r, 250));
+        } catch (err) {
+          console.log(`[Miner] Error al retirar pan: ${err.message}`);
+        }
+      }
+    }
     
     // Si tenemos menos de 32 bloques de piedra sólida, intentar retirar del cofre de picotas
     let currentSolidFiller = bot.inventory.items()
@@ -830,11 +872,14 @@ async function restockPickaxes(force = false) {
     let restockedMsg = '[Miner] ';
     if (pickaxesWithdrawn > 0) restockedMsg += `Se retiraron ${pickaxesWithdrawn} picotas. `;
     if (torchesWithdrawn > 0) restockedMsg += `Se retiraron ${torchesWithdrawn} antorchas. `;
+    if (breadWithdrawn > 0) restockedMsg += `Se retiraron ${breadWithdrawn} panes. `;
     if (pickaxesDeposited > 0) restockedMsg += `Se depositaron ${pickaxesDeposited} picotas en exceso. `;
     if (torchesDeposited > 0) restockedMsg += `Se depositaron ${torchesDeposited} antorchas en exceso. `;
+    if (breadDeposited > 0) restockedMsg += `Se depositaron ${breadDeposited} panes en exceso. `;
     const finalCarrots = bot.inventory.items().filter(item => item.name === 'carrot').reduce((sum, item) => sum + item.count, 0);
-    restockedMsg += `Zanahorias en inventario: ${finalCarrots}. `;
-    if (pickaxesWithdrawn === 0 && torchesWithdrawn === 0 && pickaxesDeposited === 0 && torchesDeposited === 0 && carrotsNeeded === 0) {
+    const finalBread = bot.inventory.items().filter(item => item.name === 'bread').reduce((sum, item) => sum + item.count, 0);
+    restockedMsg += `Zanahorias: ${finalCarrots}, Panes: ${finalBread}. `;
+    if (pickaxesWithdrawn === 0 && torchesWithdrawn === 0 && breadWithdrawn === 0 && pickaxesDeposited === 0 && torchesDeposited === 0 && breadDeposited === 0 && carrotsNeeded === 0 && breadNeeded === 0) {
       restockedMsg += '¡No había repuestos en el cofre ni excesos para depositar!';
     }
     sendOwnerMsg(restockedMsg, force);
