@@ -12,7 +12,9 @@ let saplingChestPosition = null;
 let bedPosition = null;
 const ignoredLogs = new Set();
 let loopTimeout = null;
-let chestErrorCooldown = 0;
+let woodChestErrorCooldown = 0;
+let axeChestErrorCooldown = 0;
+let saplingChestErrorCooldown = 0;
 let hasFailedAxeResupply = false;
 
 // Límites del área de tala (Granja de árboles)
@@ -198,8 +200,8 @@ async function depositToChest() {
     }
   } catch (err) {
     sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre: ${err.message}`);
-    chestErrorCooldown = Date.now() + 60000;
-    sendOwnerMsg('[Chest] Se pausarán los intentos de depósito en cofre por 60 segundos.');
+    woodChestErrorCooldown = Date.now() + 60000;
+    sendOwnerMsg('[Chest] Se pausarán los intentos de depósito en cofre de madera por 60 segundos.');
   }
 }
 
@@ -337,14 +339,19 @@ async function manageSaplingsInChest() {
     }
 
     chest.close();
+    const finalTotalSaplings = bot.inventory.items().filter(isSaplingItem).reduce((sum, item) => sum + item.count, 0);
     if (depositedAny || withdrewAny) {
       sendOwnerMsg('[Chest] ¡Operación en cofre de saplings completada! (Se guardó exceso y se aseguraron 10 de cada tipo para replantar)');
     } else {
       sendOwnerMsg('[Chest] No fue necesario depositar ni retirar saplings.');
+      if (finalTotalSaplings === 0) {
+        saplingChestErrorCooldown = Date.now() + 60000;
+        sendOwnerMsg('[Chest] No hay saplings repuestos en el cofre. Se pausarán los intentos por 60 segundos.');
+      }
     }
   } catch (err) {
     sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre de saplings: ${err.message}`);
-    chestErrorCooldown = Date.now() + 60000;
+    saplingChestErrorCooldown = Date.now() + 60000;
   }
 }
 
@@ -427,7 +434,7 @@ async function withdrawAxesFromChest() {
     }
   } catch (err) {
     sendOwnerMsg(`[Chest] Error al interactuar con el cofre de hachas: ${err.message}`);
-    chestErrorCooldown = Date.now() + 30000;
+    axeChestErrorCooldown = Date.now() + 30000;
   }
 }
 
@@ -596,7 +603,7 @@ async function lumberjackCycle() {
   if (!shouldChop) return;
   if (bot.isSleeping || bot.isGoingToSleep || bot.isYielding) return;
 
-  if (woodChestPosition && countWood() >= 32 && Date.now() > chestErrorCooldown) {
+  if (woodChestPosition && countWood() >= 32 && Date.now() > woodChestErrorCooldown) {
     await depositToChest();
     if (saplingChestPosition) {
       await manageSaplingsInChest();
@@ -604,13 +611,13 @@ async function lumberjackCycle() {
     return;
   }
 
-  if (axeChestPosition && getAxesCount() === 0 && !hasFailedAxeResupply && Date.now() > chestErrorCooldown) {
+  if (axeChestPosition && getAxesCount() === 0 && !hasFailedAxeResupply && Date.now() > axeChestErrorCooldown) {
     await withdrawAxesFromChest();
     return;
   }
 
   const totalSaplings = bot.inventory.items().filter(isSaplingItem).reduce((sum, item) => sum + item.count, 0);
-  if (saplingChestPosition && totalSaplings === 0 && Date.now() > chestErrorCooldown) {
+  if (saplingChestPosition && totalSaplings === 0 && Date.now() > saplingChestErrorCooldown) {
     await manageSaplingsInChest();
     return;
   }
