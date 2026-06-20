@@ -982,14 +982,19 @@ header {
   border-style: dashed;
 }
 
+.live-view-controls {
+  position: relative;
+  z-index: 10;
+}
+
 .live-view-container iframe {
   transition: opacity 0.5s ease;
   opacity: 0.95;
   position: absolute;
-  top: 0;
+  top: 30px;
   left: 0;
   width: 400% !important;
-  height: 400% !important;
+  height: calc(400% - 120px) !important;
   transform: scale(0.25);
   transform-origin: top left;
   border: none;

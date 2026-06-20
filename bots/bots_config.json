@@ -88,29 +88,34 @@
     "type": "miner",
     "silentMode": true,
     "picotasChest": {
-      "x": -548,
+      "x": -549,
       "y": -53,
-      "z": 669
+      "z": 627
     },
     "oresChest": {
-      "x": -548,
+      "x": -549,
       "y": -53,
-      "z": 672
+      "z": 629
     },
     "miningState": {
       "isMining": true,
       "startPos": {
-        "x": -543,
+        "x": -553,
         "y": -53,
-        "z": 671
+        "z": 628
       },
-      "mainDirection": "east",
-      "currentNodeIndex": 26,
-      "currentBranchSide": "left",
-      "branchProgress": 20,
+      "mainDirection": "west",
+      "currentNodeIndex": 2,
+      "currentBranchSide": "right",
+      "branchProgress": 2,
       "mainTunnelProgress": 3,
       "branchLength": 20
     },
-    "viewerPort": 3017
+    "viewerPort": 3017,
+    "bedPosition": {
+      "x": -551,
+      "y": -53,
+      "z": 629
+    }
   }
 }

@@ -647,12 +647,11 @@ function switchSubTab(name, subTab) {
         const currentQuality = localStorage.getItem(`live-quality-${name}`) || 'verylow';
         cardBody.innerHTML = `
           <div class="live-view-container" style="flex: 1; display: flex; flex-direction: column; height: 100%; min-height: 300px; position: relative;">
-            <div class="live-view-controls" style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.8); padding: 6px 12px; font-size: 0.8rem; border-bottom: 1px solid #333; color: #fff;">
+            <div class="live-view-controls" style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.8); padding: 4px 12px; height: 30px; box-sizing: border-box; font-size: 0.8rem; border-bottom: 1px solid #333; color: #fff;">
               <div style="font-weight: 600; display: flex; align-items: center; gap: 6px;">
-                <span style="color: #10b981;">●</span> Live View
+                <span style="color: #10b981;">●</span> Live
               </div>
               <div style="display: flex; align-items: center; gap: 12px;">
-                <button class="btn" onclick="setLiveViewMode('${name}', 'python')" style="padding: 2px 8px; font-size: 0.7rem; background: #3b82f6; color: #fff; border: none; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 4px;">🖥️ Cambiar a Python</button>
                 <div style="display: flex; align-items: center; gap: 6px;">
                   <span style="color: #aaa; font-size: 0.75rem;">Calidad:</span>
                   <select id="quality-select-${name}" onchange="changeLiveQuality('${name}', this.value)" style="background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; cursor: pointer;">
@@ -664,7 +663,7 @@ function switchSubTab(name, subTab) {
                 </div>
               </div>
             </div>
-            <iframe id="live-iframe-${name}" src="http://${window.location.hostname}:${port}?quality=${currentQuality}" style="flex: 1; border: none; width: 100%; height: calc(100% - 33px);" allowfullscreen></iframe>
+            <iframe id="live-iframe-${name}" src="http://${window.location.hostname}:${port}?quality=${currentQuality}" style="flex: 1; border: none; width: 100%; height: calc(100% - 30px);" allowfullscreen></iframe>
             <div class="live-view-overlay" style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; color: #10b981; pointer-events: none;">
               🔴 PUERTO ${port}
             </div>

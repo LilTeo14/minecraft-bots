@@ -295,5 +295,6 @@ module.exports = {
   onSpawn,
   onChat,
   onDeath,
-  onEnd
+  onEnd,
+  loadBotConfig
 };

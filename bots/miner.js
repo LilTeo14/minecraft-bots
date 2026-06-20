@@ -546,14 +546,17 @@ async function depositOres(force = false) {
   
   sendOwnerMsg(`[Miner] Yendo al cofre de ores en ${oresChest} para depositar ores...`, force);
   
-  const dirVec = directionVectors[miningState.mainDirection];
-  const nodePos = miningState.startPos.plus(dirVec.scaled(miningState.currentNodeIndex * 3));
-  
-  if (miningState.currentBranchSide !== 'none') {
-    let currentPos = bot.entity.position.floored();
-    await walkTunnel(currentPos, nodePos);
+  const isInsideTunnel = miningState.startPos && isMiningActive;
+  if (isInsideTunnel) {
+    const dirVec = directionVectors[miningState.mainDirection];
+    const nodePos = miningState.startPos.plus(dirVec.scaled(miningState.currentNodeIndex * 3));
+    
+    if (miningState.currentBranchSide !== 'none') {
+      let currentPos = bot.entity.position.floored();
+      await walkTunnel(currentPos, nodePos);
+    }
+    await walkTunnel(nodePos, miningState.startPos);
   }
-  await walkTunnel(nodePos, miningState.startPos);
   
   const reached = await goToChest(oresChest, 2);
   if (!reached) {
@@ -1492,15 +1495,23 @@ function configureMovements(movements) {
 }
 
 function onChat(message, isWhisper = false) {
-  const msg = message.toLowerCase().trim();
+  let cleanMessage = message.trim();
   const myName = bot.username.toLowerCase();
 
-  let checkMsg = msg;
-  const words = msg.split(/\s+/);
-  if (words.length > 1) {
-    const firstWord = words[0];
+  let wordsForCleaning = cleanMessage.split(/\s+/);
+  if (wordsForCleaning.length > 1) {
+    const firstWord = wordsForCleaning[0].toLowerCase();
     if (firstWord === myName || firstWord === 'mineros' || firstWord === 'miners') {
-      checkMsg = words.slice(1).join(' ');
+      cleanMessage = wordsForCleaning.slice(1).join(' ');
+    }
+  }
+
+  let checkMsg = cleanMessage.toLowerCase();
+  if (checkMsg.startsWith('cofre ')) {
+    checkMsg = checkMsg.substring(6);
+    const tempWords = cleanMessage.split(/\s+/);
+    if (tempWords[0].toLowerCase() === 'cofre') {
+      cleanMessage = tempWords.slice(1).join(' ');
     }
   }
 
@@ -1528,7 +1539,7 @@ function onChat(message, isWhisper = false) {
     sendOwnerMsg('Iniciando depósito manual de minerales...', true);
     depositOres(true);
   } else if (checkMsg.startsWith('picotas ')) {
-    const parts = message.trim().split(/\s+/);
+    const parts = cleanMessage.split(/\s+/);
     if (parts.length === 4) {
       const x = Math.floor(parseFloat(parts[1]));
       const y = Math.floor(parseFloat(parts[2]));
@@ -1544,7 +1555,7 @@ function onChat(message, isWhisper = false) {
       sendOwnerMsg('Formato incorrecto. Usa: picotas <x> <y> <z>', true);
     }
   } else if (checkMsg.startsWith('ores ')) {
-    const parts = message.trim().split(/\s+/);
+    const parts = cleanMessage.split(/\s+/);
     if (parts.length === 4) {
       const x = Math.floor(parseFloat(parts[1]));
       const y = Math.floor(parseFloat(parts[2]));
@@ -1579,7 +1590,7 @@ function onChat(message, isWhisper = false) {
     }
     sendOwnerMsg(statusMsg, true);
   } else if (checkMsg.startsWith('minar ')) {
-    const parts = message.trim().split(/\s+/);
+    const parts = cleanMessage.split(/\s+/);
     if (parts.length === 3 && parts[1].toLowerCase() === 'aqui') {
       const dir = parseDirection(parts[2]);
       if (!dir) {
@@ -1680,5 +1691,6 @@ module.exports = {
   onSpawn,
   onChat,
   onDeath,
-  onEnd
+  onEnd,
+  loadBotConfig
 };

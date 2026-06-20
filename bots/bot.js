@@ -535,6 +535,127 @@ async function handleCommonCommand(message, isWhisper = false, sender = OWNER) {
   } else if (msg === 'vuelve') {
     sendOwnerMsg('Regresando (back)...', true);
     bot.chat('/back');
+  } else if (msg === 'cama yo') {
+    const player = bot.players[sender.toLowerCase()] || bot.players[sender];
+    if (!player || !player.entity) {
+      sendOwnerMsg('No puedo ver tu posición. Asegúrate de estar cerca.', true);
+      return;
+    }
+    const pPos = player.entity.position.floored();
+    let bedPos = null;
+    
+    const below = pPos.offset(0, -1, 0);
+    const blockBelow = bot.blockAt(below);
+    const atFeet = bot.blockAt(pPos);
+    
+    if (blockBelow && blockBelow.name.includes('bed')) {
+      bedPos = below;
+    } else if (atFeet && atFeet.name.includes('bed')) {
+      bedPos = pPos;
+    } else {
+      const bedBlock = bot.findBlock({
+        matching: (block) => block && block.name.includes('bed'),
+        point: pPos,
+        maxDistance: 3
+      });
+      if (bedBlock) {
+        bedPos = bedBlock.position;
+      }
+    }
+    
+    if (bedPos) {
+      const { x, y, z } = bedPos;
+      saveConfig({ bedPosition: { x, y, z } });
+      sendOwnerMsg(`Guardada posición de cama en ${bedPos}. Moviéndome allí para establecer respawn...`, true);
+      
+      bot.pathfinder.setGoal(null);
+      goToBase(bedPos, 2, 20000).then(async (reached) => {
+        if (!reached) {
+          sendOwnerMsg(`No pude llegar a la cama en ${bedPos}`, true);
+          return;
+        }
+        
+        const bedBlock = bot.blockAt(bedPos);
+        if (!bedBlock || !bedBlock.name.includes('bed')) {
+          sendOwnerMsg(`El bloque en ${bedPos} no es una cama.`, true);
+          return;
+        }
+        
+        try {
+          await bot.lookAt(bedPos.offset(0.5, 0.5, 0.5));
+          await bot.activateBlock(bedBlock);
+          sendOwnerMsg(`Interactuado con la cama en ${bedPos} para establecer respawn.`, true);
+        } catch (err) {
+          sendOwnerMsg(`Error al interactuar con la cama: ${err.message}`, true);
+        }
+      });
+      
+      if (botModule && typeof botModule.loadBotConfig === 'function') {
+        botModule.loadBotConfig();
+      }
+    } else {
+      sendOwnerMsg('No encontré ninguna cama debajo de ti ni a tu alrededor (rango 3).', true);
+    }
+  } else if (msg.startsWith('cofre ') && msg.endsWith(' yo')) {
+    const parts = msg.split(/\s+/);
+    if (parts.length === 3) {
+      const type = parts[1];
+      const player = bot.players[sender.toLowerCase()] || bot.players[sender];
+      if (!player || !player.entity) {
+        sendOwnerMsg('No puedo ver tu posición. Asegúrate de estar cerca.', true);
+        return;
+      }
+      const pPos = player.entity.position.floored();
+      let chestPos = null;
+      
+      const below = pPos.offset(0, -1, 0);
+      const blockBelow = bot.blockAt(below);
+      const atFeet = bot.blockAt(pPos);
+      
+      if (blockBelow && blockBelow.name.includes('chest')) {
+        chestPos = below;
+      } else if (atFeet && atFeet.name.includes('chest')) {
+        chestPos = pPos;
+      } else {
+        const chestBlock = bot.findBlock({
+          matching: (block) => block && block.name.includes('chest'),
+          point: pPos,
+          maxDistance: 3
+        });
+        if (chestBlock) {
+          chestPos = chestBlock.position;
+        }
+      }
+      
+      if (!chestPos) {
+        sendOwnerMsg('No encontré ningún cofre debajo de ti ni a tu alrededor (rango 3).', true);
+        return;
+      }
+      
+      let key = null;
+      if (type === 'papas' || type === 'papa') key = 'potatoChestPosition';
+      else if (type === 'trigo') key = 'wheatChestPosition';
+      else if (type === 'semillas' || type === 'semilla') key = 'seedChestPosition';
+      else if (type === 'zanahorias' || type === 'zanahoria') key = 'carrotChestPosition';
+      else if (type === 'leña' || type === 'madera') key = 'woodChestPosition';
+      else if (type === 'picotas' || type === 'picota') key = 'picotasChest';
+      else if (type === 'ores' || type === 'ore' || type === 'minerales' || type === 'mineral') key = 'oresChest';
+      
+      if (!key) {
+        sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: papas, trigo, semillas, zanahorias, leña, picotas, ores.`, true);
+        return;
+      }
+      
+      const { x, y, z } = chestPos;
+      saveConfig({ [key]: { x, y, z } });
+      sendOwnerMsg(`Posición del cofre de ${type} configurada en ${chestPos} a partir de tu ubicación.`, true);
+      
+      if (botModule && typeof botModule.loadBotConfig === 'function') {
+        botModule.loadBotConfig();
+      }
+    } else {
+      sendOwnerMsg('Formato incorrecto. Usa: cofre <tipo> yo', true);
+    }
   } else if (msg.startsWith('cama ')) {
     const parts = message.trim().split(/\s+/);
     if (parts.length === 4) {
@@ -816,6 +937,87 @@ function createBot() {
         throw new Error('Blocked by sleeping routine');
       }
       return originalGoto.call(bot.pathfinder, goal);
+    };
+
+    // Patch bot.digTime to fix slow digging on ores and deepslate blocks
+    const originalDigTime = bot.digTime;
+    bot.digTime = function (block) {
+      const heldItem = bot.heldItem;
+      const isPickaxe = heldItem && heldItem.name.includes('pickaxe');
+      const isOreOrStone = block && (
+        block.name.includes('ore') || 
+        block.name.includes('raw_') || 
+        block.name.includes('deepslate') || 
+        block.name.includes('stone') || 
+        block.name.includes('coal') ||
+        block.name.includes('iron') ||
+        block.name.includes('gold') ||
+        block.name.includes('diamond') ||
+        block.name.includes('redstone') ||
+        block.name.includes('lapis') ||
+        block.name.includes('emerald') ||
+        block.name.includes('copper') ||
+        block.name.includes('obsidian') ||
+        block.name.includes('basalt') ||
+        block.name.includes('blackstone')
+      );
+
+      if (isPickaxe && isOreOrStone) {
+        const hardness = block.hardness;
+        if (hardness === null || hardness === undefined) {
+          return originalDigTime.call(bot, block);
+        }
+
+        const toolMultipliers = {
+          wooden_pickaxe: 2,
+          golden_pickaxe: 12,
+          stone_pickaxe: 4,
+          iron_pickaxe: 6,
+          diamond_pickaxe: 8,
+          netherite_pickaxe: 9
+        };
+
+        const baseMultiplier = toolMultipliers[heldItem.name] || 1;
+        let speed = baseMultiplier;
+
+        if (heldItem.enchants) {
+          const efficiency = heldItem.enchants.find(e => e.name === 'efficiency' || e.name === 'efficiency');
+          if (efficiency) {
+            speed += (efficiency.lvl * efficiency.lvl) + 1;
+          }
+        }
+
+        const haste = bot.effects && bot.effects[3];
+        if (haste) {
+          speed *= (1 + 0.2 * (haste.amplifier + 1));
+        }
+
+        const fatigue = bot.effects && bot.effects[4];
+        if (fatigue) {
+          speed *= Math.pow(0.3, fatigue.amplifier + 1);
+        }
+
+        let time = (hardness * 1.5) / speed;
+
+        const blockAtFeet = bot.blockAt(bot.entity.position);
+        const inWater = blockAtFeet && (blockAtFeet.name.includes('water') || blockAtFeet.name.includes('lava'));
+        let aquaAffinity = false;
+        const helmet = bot.inventory.slots[5];
+        if (helmet && helmet.enchants) {
+          aquaAffinity = helmet.enchants.some(e => e.name === 'aqua_affinity');
+        }
+        if (inWater && !aquaAffinity) {
+          time *= 5;
+        }
+
+        if (!bot.entity.onGround) {
+          time *= 5;
+        }
+
+        return Math.max(0, Math.round(time * 1000));
+      }
+
+      return originalDigTime.call(bot, block);
     };
   });
 
