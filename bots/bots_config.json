@@ -105,9 +105,9 @@
         "z": 671
       },
       "mainDirection": "east",
-      "currentNodeIndex": 23,
+      "currentNodeIndex": 26,
       "currentBranchSide": "left",
-      "branchProgress": 12,
+      "branchProgress": 20,
       "mainTunnelProgress": 3,
       "branchLength": 20
     },

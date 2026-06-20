@@ -844,6 +844,7 @@ function createBot() {
   bot.on('spawn', () => {
     lastSpawnTime = Date.now();
     console.log(`[System] Bot "${options.username}" ha aparecido en el juego.`);
+    
     mcData = require('minecraft-data')(bot.version);
 
     // Start Prismarine Viewer if configured

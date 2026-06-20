@@ -65,12 +65,8 @@ class CameraSlot(QFrame):
         self.container_layout = QVBoxLayout(self.container)
         self.container_layout.setContentsMargins(0, 0, 0, 0)
         
-        # WebView instance
-        self.web_view = QWebEngineView(self.container)
-        self.web_view.setStyleSheet("background-color: #000000; border-radius: 2px;")
-        self.web_view.setUrl(QUrl("about:blank"))
-        self.container_layout.addWidget(self.web_view, 1) # Stretch = 1
-        self.web_view.hide()
+        # WebView instance (initialized dynamically to save memory)
+        self.web_view = None
         
         # Placeholder Screen
         self.placeholder = QLabel("SIN SEÑAL", self.container)
@@ -87,37 +83,47 @@ class CameraSlot(QFrame):
         
         self.layout.addWidget(self.container, 1) # Stretch = 1 (Takes all remaining vertical space)
         self.set_active(False)
-
-    def set_active(self, active):
-        self.setProperty("active", "true" if active else "false")
-        self.style().polish(self)
-
-    def load_bot(self, name, port):
-        self.bot_name = name
-        self.port = port
-        self.bot_label.setText(name.upper())
-        self.bot_label.setStyleSheet("color: #10b981; font-family: 'Outfit', sans-serif; font-weight: bold; font-size: 10px;")
-        
-        # Use quality=low (0.3 pixel ratio) for sharp output, fov=110 for wide camera angle
-        url_str = f"http://localhost:{port}?quality=low&fov=110"
-        self.web_view.setUrl(QUrl(url_str))
-        
-        self.web_view.setZoomFactor(1.0) 
-        
-        self.placeholder.hide()
-        self.web_view.show()
-        self.set_active(True)
-
-    def unload_bot(self):
-        self.bot_name = None
-        self.port = None
-        self.bot_label.setText("SIN SEÑAL")
-        self.bot_label.setStyleSheet("color: #4b5563; font-family: 'Outfit', sans-serif; font-weight: bold; font-size: 10px;")
-        
-        self.web_view.setUrl(QUrl("about:blank"))
-        self.web_view.hide()
-        self.placeholder.show()
-        self.set_active(False)
+ 
+     def set_active(self, active):
+         self.setProperty("active", "true" if active else "false")
+         self.style().polish(self)
+ 
+     def load_bot(self, name, port):
+         self.bot_name = name
+         self.port = port
+         self.bot_label.setText(name.upper())
+         self.bot_label.setStyleSheet("color: #10b981; font-family: 'Outfit', sans-serif; font-weight: bold; font-size: 10px;")
+         
+         # Dynamically create the QWebEngineView to save RAM
+         if not self.web_view:
+             self.web_view = QWebEngineView(self.container)
+             self.web_view.setStyleSheet("background-color: #000000; border-radius: 2px;")
+             self.container_layout.addWidget(self.web_view, 1)
+ 
+         # Use quality=low (0.3 pixel ratio) for sharp output, fov=110 for wide camera angle
+         url_str = f"http://localhost:{port}?quality=low&fov=110"
+         self.web_view.setUrl(QUrl(url_str))
+         
+         self.web_view.setZoomFactor(1.0) 
+         
+         self.placeholder.hide()
+         self.web_view.show()
+         self.set_active(True)
+ 
+     def unload_bot(self):
+         self.bot_name = None
+         self.port = None
+         self.bot_label.setText("SIN SEÑAL")
+         self.bot_label.setStyleSheet("color: #4b5563; font-family: 'Outfit', sans-serif; font-weight: bold; font-size: 10px;")
+         
+         if self.web_view:
+             self.web_view.setUrl(QUrl("about:blank"))
+             self.container_layout.removeWidget(self.web_view)
+             self.web_view.deleteLater()
+             self.web_view = None
+ 
+         self.placeholder.show()
+         self.set_active(False)
 
 class MainWindow(QMainWindow):
     def __init__(self):
