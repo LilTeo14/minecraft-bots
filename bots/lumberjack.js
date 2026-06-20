@@ -7,12 +7,14 @@ let isWorking = false;
 let isDepositing = false;
 let shouldChop = false;
 let woodChestPosition = null;
+let stickChestPosition = null;
 let axeChestPosition = null;
 let saplingChestPosition = null;
 let bedPosition = null;
 const ignoredLogs = new Set();
 let loopTimeout = null;
 let woodChestErrorCooldown = 0;
+let stickChestErrorCooldown = 0;
 let axeChestErrorCooldown = 0;
 let saplingChestErrorCooldown = 0;
 let hasFailedAxeResupply = false;
@@ -66,6 +68,7 @@ function saveBotConfig() {
   context.saveConfig({
     shouldChop,
     woodChestPosition: woodChestPosition ? { x: woodChestPosition.x, y: woodChestPosition.y, z: woodChestPosition.z } : null,
+    stickChestPosition: stickChestPosition ? { x: stickChestPosition.x, y: stickChestPosition.y, z: stickChestPosition.z } : null,
     axeChestPosition: axeChestPosition ? { x: axeChestPosition.x, y: axeChestPosition.y, z: axeChestPosition.z } : null,
     saplingChestPosition: saplingChestPosition ? { x: saplingChestPosition.x, y: saplingChestPosition.y, z: saplingChestPosition.z } : null,
     bedPosition: bedPosition ? { x: bedPosition.x, y: bedPosition.y, z: bedPosition.z } : null
@@ -82,6 +85,9 @@ function loadBotConfig() {
     }
     if (config.woodChestPosition) {
       woodChestPosition = new Vec3(config.woodChestPosition.x, config.woodChestPosition.y, config.woodChestPosition.z);
+    }
+    if (config.stickChestPosition) {
+      stickChestPosition = new Vec3(config.stickChestPosition.x, config.stickChestPosition.y, config.stickChestPosition.z);
     }
     if (config.axeChestPosition) {
       axeChestPosition = new Vec3(config.axeChestPosition.x, config.axeChestPosition.y, config.axeChestPosition.z);
@@ -175,6 +181,14 @@ async function depositToChest() {
           continue;
         }
 
+        if (item.name === 'stick' && stickChestPosition) {
+          continue;
+        }
+
+        if (item.name === 'apple' && axeChestPosition) {
+          continue;
+        }
+
         depositTarget = { type: item.type, name: item.name, count: item.count };
         break;
       }
@@ -202,6 +216,183 @@ async function depositToChest() {
     sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre: ${err.message}`);
     woodChestErrorCooldown = Date.now() + 60000;
     sendOwnerMsg('[Chest] Se pausarán los intentos de depósito en cofre de madera por 60 segundos.');
+  }
+}
+
+async function depositSticksToChest() {
+  if (!stickChestPosition) return;
+  if (Date.now() < stickChestErrorCooldown) return;
+
+  let targetChestPosition = stickChestPosition;
+
+  const initialBlock = bot.blockAt(targetChestPosition);
+  if (!initialBlock || !initialBlock.name.includes('chest')) {
+    const nearbyChest = bot.findBlock({
+      matching: (block) => block.name.includes('chest'),
+      point: targetChestPosition,
+      maxDistance: 2
+    });
+    if (nearbyChest) {
+      console.log(`[Chest] Corrigiendo posición del cofre de palos a ${nearbyChest.position}`);
+      stickChestPosition = nearbyChest.position;
+      targetChestPosition = nearbyChest.position;
+      saveBotConfig();
+    }
+  }
+
+  sendOwnerMsg(`[Chest] Yendo al cofre de palos en ${targetChestPosition} para guardar palos...`);
+
+  bot.pathfinder.setGoal(null);
+  bot.stopDigging();
+
+  const reached = await context.goToBase(targetChestPosition, 2, 15000, configureMovements);
+  if (!reached) {
+    sendOwnerMsg(`[Chest] No pude llegar al cofre de palos en ${targetChestPosition}`);
+    return;
+  }
+
+  await new Promise(r => setTimeout(r, 500));
+
+  const chestBlock = bot.blockAt(targetChestPosition);
+  if (!chestBlock || !chestBlock.name.includes('chest')) {
+    sendOwnerMsg(`[Chest] El bloque en ${targetChestPosition} no es un cofre o no está cargado.`);
+    return;
+  }
+
+  const blockAbove = bot.blockAt(targetChestPosition.offset(0, 1, 0));
+  if (blockAbove && blockAbove.boundingBox !== 'empty' && blockAbove.name !== 'air' && blockAbove.name !== 'cave_air') {
+    sendOwnerMsg(`[Chest] ¡ADVERTENCIA! El cofre de palos en ${targetChestPosition} está obstruido por "${blockAbove.name}" en la posición superior ${targetChestPosition.offset(0, 1, 0)}.`);
+  }
+
+  try {
+    const chest = await bot.openChest(chestBlock);
+    let depositedAny = false;
+
+    let depositTarget = null;
+    do {
+      const currentItems = bot.inventory.items();
+      depositTarget = null;
+
+      for (const item of currentItems) {
+        if (item.name === 'stick') {
+          depositTarget = { type: item.type, name: item.name, count: item.count };
+          break;
+        }
+      }
+
+      if (depositTarget) {
+        try {
+          console.log(`[Chest] Depositando ${depositTarget.count} de ${depositTarget.name}...`);
+          await chest.deposit(depositTarget.type, null, depositTarget.count);
+          depositedAny = true;
+          await new Promise(r => setTimeout(r, 200));
+        } catch (err) {
+          console.log(`[Chest] Error al depositar ${depositTarget.name}: ${err.message}`);
+          break;
+        }
+      }
+    } while (depositTarget);
+
+    chest.close();
+    if (depositedAny) {
+      sendOwnerMsg('[Chest] ¡Operación en cofre de palos completada!');
+    } else {
+      sendOwnerMsg('[Chest] No fue necesario depositar palos.');
+    }
+  } catch (err) {
+    sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre de palos: ${err.message}`);
+    stickChestErrorCooldown = Date.now() + 60000;
+    sendOwnerMsg('[Chest] Se pausarán los intentos de depósito en cofre de palos por 60 segundos.');
+  }
+}
+
+async function depositApplesToAxeChest() {
+  if (!axeChestPosition) return;
+  if (Date.now() < axeChestErrorCooldown) return;
+
+  const hasApples = bot.inventory.items().some(item => item.name === 'apple');
+  if (!hasApples) return;
+
+  let targetChestPosition = axeChestPosition;
+
+  const initialBlock = bot.blockAt(targetChestPosition);
+  if (!initialBlock || !initialBlock.name.includes('chest')) {
+    const nearbyChest = bot.findBlock({
+      matching: (block) => block.name.includes('chest'),
+      point: targetChestPosition,
+      maxDistance: 2
+    });
+    if (nearbyChest) {
+      console.log(`[Chest] Corrigiendo posición del cofre de hachas a ${nearbyChest.position}`);
+      axeChestPosition = nearbyChest.position;
+      targetChestPosition = nearbyChest.position;
+      saveBotConfig();
+    }
+  }
+
+  sendOwnerMsg(`[Chest] Yendo al cofre de hachas en ${targetChestPosition} para guardar manzanas...`);
+
+  bot.pathfinder.setGoal(null);
+  bot.stopDigging();
+
+  const reached = await context.goToBase(targetChestPosition, 2, 15000, configureMovements);
+  if (!reached) {
+    sendOwnerMsg(`[Chest] No pude llegar al cofre de hachas en ${targetChestPosition}`);
+    return;
+  }
+
+  await new Promise(r => setTimeout(r, 500));
+
+  const chestBlock = bot.blockAt(targetChestPosition);
+  if (!chestBlock || !chestBlock.name.includes('chest')) {
+    sendOwnerMsg(`[Chest] El bloque en ${targetChestPosition} no es un cofre o no está cargado.`);
+    return;
+  }
+
+  const blockAbove = bot.blockAt(targetChestPosition.offset(0, 1, 0));
+  if (blockAbove && blockAbove.boundingBox !== 'empty' && blockAbove.name !== 'air' && blockAbove.name !== 'cave_air') {
+    sendOwnerMsg(`[Chest] ¡ADVERTENCIA! El cofre de hachas en ${targetChestPosition} está obstruido por "${blockAbove.name}" en la posición superior ${targetChestPosition.offset(0, 1, 0)}.`);
+  }
+
+  try {
+    const chest = await bot.openChest(chestBlock);
+    let depositedAny = false;
+
+    let depositTarget = null;
+    do {
+      const currentItems = bot.inventory.items();
+      depositTarget = null;
+
+      for (const item of currentItems) {
+        if (item.name === 'apple') {
+          depositTarget = { type: item.type, name: item.name, count: item.count };
+          break;
+        }
+      }
+
+      if (depositTarget) {
+        try {
+          console.log(`[Chest] Depositando ${depositTarget.count} de ${depositTarget.name}...`);
+          await chest.deposit(depositTarget.type, null, depositTarget.count);
+          depositedAny = true;
+          await new Promise(r => setTimeout(r, 200));
+        } catch (err) {
+          console.log(`[Chest] Error al depositar ${depositTarget.name}: ${err.message}`);
+          break;
+        }
+      }
+    } while (depositTarget);
+
+    chest.close();
+    if (depositedAny) {
+      sendOwnerMsg('[Chest] ¡Operación de manzanas en cofre de hachas completada!');
+    } else {
+      sendOwnerMsg('[Chest] No fue necesario depositar manzanas.');
+    }
+  } catch (err) {
+    sendOwnerMsg(`[Chest] Error al abrir/interactuar con el cofre de hachas: ${err.message}`);
+    axeChestErrorCooldown = Date.now() + 60000;
+    sendOwnerMsg('[Chest] Se pausarán los intentos de depósito de manzanas en el cofre de hachas por 60 segundos.');
   }
 }
 
@@ -605,6 +796,12 @@ async function lumberjackCycle() {
 
   if (woodChestPosition && countWood() >= 32 && Date.now() > woodChestErrorCooldown) {
     await depositToChest();
+    if (stickChestPosition) {
+      await depositSticksToChest();
+    }
+    if (axeChestPosition) {
+      await depositApplesToAxeChest();
+    }
     if (saplingChestPosition) {
       await manageSaplingsInChest();
     }
@@ -985,7 +1182,18 @@ function onChat(message, isWhisper = false) {
       bot.stopDigging();
       const oldShouldChop = shouldChop;
       shouldChop = false;
-      depositToChest().finally(() => {
+      (async () => {
+        await depositToChest();
+        if (stickChestPosition) {
+          await depositSticksToChest();
+        }
+        if (axeChestPosition) {
+          await depositApplesToAxeChest();
+        }
+        if (saplingChestPosition) {
+          await manageSaplingsInChest();
+        }
+      })().finally(() => {
         shouldChop = oldShouldChop;
         isDepositing = false;
       });
@@ -1003,6 +1211,10 @@ function onChat(message, isWhisper = false) {
           woodChestPosition = pos;
           saveBotConfig();
           sendOwnerMsg(`Posición del cofre de leña configurada en ${pos}`, true);
+        } else if (type === 'palos' || type === 'palo' || type === 'sticks' || type === 'stick') {
+          stickChestPosition = pos;
+          saveBotConfig();
+          sendOwnerMsg(`Posición del cofre de palos configurada en ${pos}`, true);
         } else if (type === 'hachas' || type === 'hacha') {
           axeChestPosition = pos;
           saveBotConfig();
@@ -1024,13 +1236,13 @@ function onChat(message, isWhisper = false) {
           context.saveConfig({ carrotChestPosition: { x, y, z } });
           sendOwnerMsg(`Posición del cofre de zanahorias configurada en ${pos} (compartida)`, true);
         } else {
-          sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: leña, papas, trigo, semillas, zanahorias`, true);
+          sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: leña, palos, papas, trigo, semillas, zanahorias`, true);
         }
       } else {
         sendOwnerMsg('Coordenadas de cofre inválidas. Usa: cofre <tipo> x y z', true);
       }
     } else {
-      sendOwnerMsg('Formato incorrecto. Usa: cofre <leña|papas|trigo|semillas|zanahorias> x y z', true);
+      sendOwnerMsg('Formato incorrecto. Usa: cofre <leña|palos|papas|trigo|semillas|zanahorias> x y z', true);
     }
   } else if (msg.startsWith('cama ')) {
     const parts = msg.split(/\s+/);

@@ -685,37 +685,12 @@ function switchSubTab(name, subTab) {
   }
 }
 
-function renderBotDetailsContainer() {
-  const container = document.getElementById('bot-details-container');
-  if (!container) return;
-
-  if (openBots.size === 0) {
-    container.innerHTML = `
-      <div class="card" style="height: 100%; min-height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
-        <div class="empty-detail-state">
-          <div class="empty-icon">🤖</div>
-          <h3>Selecciona un bot</h3>
-          <p>Elige uno o más bots de la lista para ver su configuración y detalles simultáneamente.</p>
-        </div>
-      </div>
-    `;
-    return;
-  }
-
-  container.innerHTML = '';
-
-  // Dynamically size columns up to 3 columns max
-  if (openBots.size === 1) {
-    container.style.gridTemplateColumns = '1fr';
-  } else if (openBots.size === 2) {
-    container.style.gridTemplateColumns = 'repeat(2, 1fr)';
-  } else {
-    container.style.gridTemplateColumns = 'repeat(3, 1fr)';
-  }
-
+function updateOpenCardsUI() {
   openBots.forEach(name => {
-    const bot = botsConfig[name];
-    if (!bot) return;
+    const card = document.getElementById(`bot-card-${name}`);
+    if (!card) return;
+    const actionsEl = card.querySelector('.bot-card-actions');
+    if (!actionsEl) return;
 
     const status = botStatuses[name] || 'offline';
     const isOnline = status !== 'offline';
@@ -761,51 +736,116 @@ function renderBotDetailsContainer() {
     if (status === 'working') badgeLabel = 'Trabajando';
     else if (status === 'online') badgeLabel = 'Conectado';
 
-    const subTab = botSubTabs[name] || 'config';
-
-    const card = document.createElement('div');
-    card.className = 'card bot-card-multiview';
-    card.id = `bot-card-${name}`;
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.alignItems = 'stretch';
-    card.style.height = '100%';
-
-    card.innerHTML = `
-      <div class="bot-details-header">
-        <div class="bot-details-title">
-          <div style="display: flex; align-items: center; gap: 0.5rem;">
-            <h2>${name}</h2>
-            <button class="close-card-btn" title="Cerrar Ficha" onclick="closeBotCard('${name}')">✕</button>
-          </div>
-          <p>Tipo: ${bot.type || 'desconocido'}</p>
-          <div class="bot-quick-cmds">
-            ${miniCmdButtons}
-          </div>
-        </div>
-        <div class="bot-card-actions">
-          <span class="bot-badge ${badgeClass}">${badgeLabel}</span>
-          <div class="bot-card-actions-buttons">
-            ${controlButton}
-            ${workButtons}
-          </div>
-        </div>
-      </div>
-      <div class="bot-sub-tabs" id="bot-card-subtabs-${name}">
-        <button class="sub-tab-btn ${subTab === 'config' ? 'active' : ''}" onclick="switchSubTab('${name}', 'config')">Configuración</button>
-        <button class="sub-tab-btn ${subTab === 'console' ? 'active' : ''}" onclick="switchSubTab('${name}', 'console')">Consola</button>
-        <button class="sub-tab-btn ${subTab === 'inventory' ? 'active' : ''}" onclick="switchSubTab('${name}', 'inventory')">Objetos</button>
-        <button class="sub-tab-btn ${subTab === 'live' ? 'active' : ''}" onclick="switchSubTab('${name}', 'live')">Live View</button>
-      </div>
-      <div id="bot-card-body-${name}" style="flex: 1; display: flex; flex-direction: column;">
-        <!-- Card content inside switchSubTab -->
+    actionsEl.innerHTML = `
+      <span class="bot-badge ${badgeClass}">${badgeLabel}</span>
+      <div class="bot-card-actions-buttons">
+        ${controlButton}
+        ${workButtons}
       </div>
     `;
 
-    container.appendChild(card);
-    // Render its active subtab content
-    switchSubTab(name, subTab);
+    const quickCmdsEl = card.querySelector('.bot-quick-cmds');
+    if (quickCmdsEl) {
+      quickCmdsEl.innerHTML = miniCmdButtons;
+    }
   });
+}
+
+function renderBotDetailsContainer() {
+  const container = document.getElementById('bot-details-container');
+  if (!container) return;
+
+  if (openBots.size === 0) {
+    container.style.gridTemplateColumns = '1fr';
+    container.innerHTML = `
+      <div class="card" style="height: 100%; min-height: 400px; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%;">
+        <div class="empty-detail-state">
+          <div class="empty-icon">🤖</div>
+          <h3>Selecciona un bot</h3>
+          <p>Elige uno o más bots de la lista para ver su configuración y detalles simultáneamente.</p>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // Remove empty state card if it exists
+  const emptyState = container.querySelector('.empty-detail-state');
+  if (emptyState) {
+    container.innerHTML = '';
+  }
+
+  // Dynamically size columns up to 3 columns max
+  if (openBots.size === 1) {
+    container.style.gridTemplateColumns = '1fr';
+  } else if (openBots.size === 2) {
+    container.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  } else {
+    container.style.gridTemplateColumns = 'repeat(3, 1fr)';
+  }
+
+  // Remove cards that are no longer open
+  const existingCards = container.querySelectorAll('.bot-card-multiview');
+  existingCards.forEach(cardEl => {
+    const cardId = cardEl.id;
+    const name = cardId.replace('bot-card-', '');
+    if (!openBots.has(name)) {
+      // Release iframe WebGL context/memory before removing
+      const iframe = cardEl.querySelector('iframe');
+      if (iframe) {
+        iframe.src = 'about:blank';
+      }
+      cardEl.remove();
+    }
+  });
+
+  // Add cards that are open but not yet rendered in DOM
+  openBots.forEach(name => {
+    let card = document.getElementById(`bot-card-${name}`);
+    if (!card) {
+      const bot = botsConfig[name];
+      if (!bot) return;
+
+      const subTab = botSubTabs[name] || 'config';
+
+      card = document.createElement('div');
+      card.className = 'card bot-card-multiview';
+      card.id = `bot-card-${name}`;
+      card.style.display = 'flex';
+      card.style.flexDirection = 'column';
+      card.style.alignItems = 'stretch';
+      card.style.height = '100%';
+
+      card.innerHTML = `
+        <div class="bot-details-header">
+          <div class="bot-details-title">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <h2>${name}</h2>
+              <button class="close-card-btn" title="Cerrar Ficha" onclick="closeBotCard('${name}')">✕</button>
+            </div>
+            <p>Tipo: ${bot.type || 'desconocido'}</p>
+            <div class="bot-quick-cmds"></div>
+          </div>
+          <div class="bot-card-actions"></div>
+        </div>
+        <div class="bot-sub-tabs" id="bot-card-subtabs-${name}">
+          <button class="sub-tab-btn ${subTab === 'config' ? 'active' : ''}" onclick="switchSubTab('${name}', 'config')">Configuración</button>
+          <button class="sub-tab-btn ${subTab === 'console' ? 'active' : ''}" onclick="switchSubTab('${name}', 'console')">Consola</button>
+          <button class="sub-tab-btn ${subTab === 'inventory' ? 'active' : ''}" onclick="switchSubTab('${name}', 'inventory')">Objetos</button>
+          <button class="sub-tab-btn ${subTab === 'live' ? 'active' : ''}" onclick="switchSubTab('${name}', 'live')">Live View</button>
+        </div>
+        <div id="bot-card-body-${name}" style="flex: 1; display: flex; flex-direction: column;">
+          <!-- Card content inside switchSubTab -->
+        </div>
+      `;
+
+      container.appendChild(card);
+      switchSubTab(name, subTab);
+    }
+  });
+
+  // Update status UI on all open cards
+  updateOpenCardsUI();
 }
 
 const emojiMap = {
@@ -912,7 +952,8 @@ async function startBot(name) {
     if (response.ok) {
       showToast(`⚡ Bot ${name} iniciado`);
       await updateStatuses();
-      renderBotDetailsContainer();
+      renderBotList();
+      updateOpenCardsUI();
     } else {
       showToast(`❌ Error al iniciar el bot`, true);
     }
@@ -931,7 +972,8 @@ async function stopBot(name) {
     if (response.ok) {
       showToast(`🔌 Bot ${name} desconectado`);
       await updateStatuses();
-      renderBotDetailsContainer();
+      renderBotList();
+      updateOpenCardsUI();
     } else {
       showToast(`❌ Error al desconectar el bot`, true);
     }
@@ -950,7 +992,8 @@ async function sendBotCommand(name, command) {
     if (response.ok) {
       showToast(`⚡ Comando enviado: ${command}`);
       await updateStatuses();
-      renderBotDetailsContainer();
+      renderBotList();
+      updateOpenCardsUI();
     } else {
       showToast(`❌ Error al enviar el comando`, true);
     }
@@ -1051,71 +1094,7 @@ loadBots();
 statusPollInterval = setInterval(async () => {
   await updateStatuses();
   renderBotList();
-  
-  // Refresh active badges and buttons for all open bot cards
-  openBots.forEach(name => {
-    const card = document.getElementById(`bot-card-${name}`);
-    if (!card) return;
-    const actionsEl = card.querySelector('.bot-card-actions');
-    if (!actionsEl) return;
-
-    const status = botStatuses[name] || 'offline';
-    const isOnline = status !== 'offline';
-    const isWorking = status === 'working';
-
-    let controlButton = '';
-    if (isOnline) {
-      controlButton = `<button class="btn btn-danger" onclick="stopBot('${name}')" title="Desconectar">🔌</button>`;
-    } else {
-      controlButton = `<button class="btn btn-primary" style="background: #3b82f6;" onclick="startBot('${name}')" title="Iniciar">⚡</button>`;
-    }
-
-    let workButtons = '';
-    if (isOnline) {
-      workButtons = `
-        <button class="btn btn-trabaja" style="background: #10b981; color: white;" ${isWorking ? 'disabled' : ''} onclick="sendBotCommand('${name}', 'trabaja')" title="Trabaja">▶️</button>
-        <button class="btn btn-para" style="background: #ef4444; color: white;" ${!isWorking ? 'disabled' : ''} onclick="sendBotCommand('${name}', 'para')" title="Para">⏸️</button>
-      `;
-    } else {
-      workButtons = `
-        <button class="btn btn-secondary" disabled title="Trabaja">▶️</button>
-        <button class="btn btn-secondary" disabled title="Para">⏸️</button>
-      `;
-    }
-
-    let miniCmdButtons = '';
-    if (isOnline) {
-      miniCmdButtons = `
-        <button class="btn btn-secondary btn-mini-cmd" onclick="sendBotCommand('${name}', 'guarda')" title="Guarda objetos en cofre">📦</button>
-        <button class="btn btn-secondary btn-mini-cmd" onclick="sendBotCommand('${name}', 'cama')" title="Ir a dormir / Asignar cama">🛏️</button>
-        <button class="btn btn-secondary btn-mini-cmd" onclick="sendBotCommand('${name}', 'dame')" title="Entregar ítems al jugador">✋</button>
-      `;
-    } else {
-      miniCmdButtons = `
-        <button class="btn btn-secondary btn-mini-cmd" disabled title="Guarda objetos en cofre">📦</button>
-        <button class="btn btn-secondary btn-mini-cmd" disabled title="Ir a dormir / Asignar cama">🛏️</button>
-        <button class="btn btn-secondary btn-mini-cmd" disabled title="Entregar ítems al jugador">✋</button>
-      `;
-    }
-
-    const badgeClass = status;
-    let badgeLabel = 'Desconectado';
-    if (status === 'working') badgeLabel = 'Trabajando';
-    else if (status === 'online') badgeLabel = 'Conectado';
-
-    actionsEl.innerHTML = `
-      <span class="bot-badge ${badgeClass}">${badgeLabel}</span>
-      <div class="bot-card-actions-buttons">
-        ${controlButton}
-        ${workButtons}
-      </div>
-    `;
-
-    const quickCmdsEl = card.querySelector('.bot-quick-cmds');
-    if (quickCmdsEl) {
-      quickCmdsEl.innerHTML = miniCmdButtons;
-    }
-  });
+  updateOpenCardsUI();
 }, 3000);
 
 window.changeLiveQuality = function(name, quality) {

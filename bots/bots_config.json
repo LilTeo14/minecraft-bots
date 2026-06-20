@@ -6,9 +6,9 @@
       "z": 665
     },
     "wheatChestPosition": {
-      "x": -609,
+      "x": -608,
       "y": 114,
-      "z": 664
+      "z": 663
     },
     "seedChestPosition": {
       "x": -608,
@@ -23,7 +23,7 @@
     "woodChestPosition": {
       "x": -589,
       "y": 112,
-      "z": 719
+      "z": 717
     },
     "extraChestPosition": {
       "x": -604,
@@ -45,6 +45,11 @@
       "x": -589,
       "y": 112,
       "z": 721
+    },
+    "stickChestPosition": {
+      "x": -589,
+      "y": 112,
+      "z": 719
     },
     "axeChestPosition": {
       "x": -589,
@@ -115,14 +120,14 @@
     "miningState": {
       "isMining": false,
       "startPos": {
-        "x": -553,
+        "x": -547,
         "y": -53,
         "z": 628
       },
-      "mainDirection": "west",
-      "currentNodeIndex": 7,
-      "currentBranchSide": "right",
-      "branchProgress": 0,
+      "mainDirection": "east",
+      "currentNodeIndex": 10,
+      "currentBranchSide": "left",
+      "branchProgress": 10,
       "mainTunnelProgress": 3,
       "branchLength": 20
     },

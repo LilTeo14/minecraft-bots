@@ -638,6 +638,7 @@ async function handleCommonCommand(message, isWhisper = false, sender = OWNER) {
       else if (type === 'semillas' || type === 'semilla') key = 'seedChestPosition';
       else if (type === 'zanahorias' || type === 'zanahoria') key = 'carrotChestPosition';
       else if (type === 'leña' || type === 'madera') key = 'woodChestPosition';
+      else if (type === 'palos' || type === 'palo' || type === 'sticks' || type === 'stick') key = 'stickChestPosition';
       else if (type === 'extras' || type === 'extra' || type === 'basura' || type === 'descarte') key = 'extraChestPosition';
       else if (type === 'picotas' || type === 'picota') key = 'picotasChest';
       else if (type === 'ores' || type === 'ore' || type === 'minerales' || type === 'mineral') key = 'oresChest';
@@ -645,7 +646,7 @@ async function handleCommonCommand(message, isWhisper = false, sender = OWNER) {
       else if (type === 'saplings' || type === 'sapling' || type === 'retoños' || type === 'retoño') key = 'saplingChestPosition';
       
       if (!key) {
-        sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: papas, trigo, semillas, zanahorias, extras, leña, picotas, ores, hachas, saplings.`, true);
+        sendOwnerMsg(`Tipo de cofre desconocido: "${type}". Usa: papas, trigo, semillas, zanahorias, extras, leña, palos, picotas, ores, hachas, saplings.`, true);
         return;
       }
       
