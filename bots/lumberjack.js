@@ -280,8 +280,8 @@ async function manageSaplingsInChest() {
       for (const item of currentItems) {
         if (isSaplingItem(item)) {
           const totalCount = currentSaplingCounts[item.name] || 0;
-          if (totalCount > 10) {
-            const excess = totalCount - 10;
+          if (totalCount > 64) {
+            const excess = totalCount - 64;
             const amountToDeposit = Math.min(item.count, excess);
             if (amountToDeposit > 0) {
               depositTarget = { type: item.type, name: item.name, count: amountToDeposit, reason: 'exceso de saplings' };
@@ -313,19 +313,19 @@ async function manageSaplingsInChest() {
       }
     }
 
-    // Escanear el cofre y retirar saplings si tenemos menos de 10
+    // Escanear el cofre y retirar saplings si tenemos menos de 64
     const chestItems = chest.containerItems();
     let withdrewAny = false;
     for (const item of chestItems) {
       if (isSaplingItem(item)) {
         const name = item.name;
         const currentCount = currentSaplingCounts[name] || 0;
-        if (currentCount < 10) {
-          const needed = 10 - currentCount;
+        if (currentCount < 64) {
+          const needed = 64 - currentCount;
           const toWithdraw = Math.min(item.count, needed);
           if (toWithdraw > 0) {
             try {
-              console.log(`[Chest] Retirando ${toWithdraw} de ${name} (completar 10)...`);
+              console.log(`[Chest] Retirando ${toWithdraw} de ${name} (completar 64)...`);
               await chest.withdraw(item.type, null, toWithdraw);
               currentSaplingCounts[name] = currentCount + toWithdraw;
               withdrewAny = true;
@@ -341,7 +341,7 @@ async function manageSaplingsInChest() {
     chest.close();
     const finalTotalSaplings = bot.inventory.items().filter(isSaplingItem).reduce((sum, item) => sum + item.count, 0);
     if (depositedAny || withdrewAny) {
-      sendOwnerMsg('[Chest] ¡Operación en cofre de saplings completada! (Se guardó exceso y se aseguraron 10 de cada tipo para replantar)');
+      sendOwnerMsg('[Chest] ¡Operación en cofre de saplings completada! (Se guardó exceso y se aseguró 1 stack de cada tipo para replantar)');
     } else {
       sendOwnerMsg('[Chest] No fue necesario depositar ni retirar saplings.');
       if (finalTotalSaplings === 0) {
