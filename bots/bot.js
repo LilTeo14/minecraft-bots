@@ -1058,8 +1058,24 @@ function createBot() {
     if (currentConf.viewerPort) {
       console.log(`[System] Iniciando Prismarine Viewer para "${options.username}" en el puerto ${currentConf.viewerPort}...`);
       try {
+        const httpModule = require('http');
+        const originalCreateServer = httpModule.createServer;
+        
+        // Intercept server creation to catch asynchronous network errors (like port already in use)
+        httpModule.createServer = function(...args) {
+          const server = originalCreateServer.apply(this, args);
+          server.on('error', (err) => {
+            console.error(`[System] [Prismarine Viewer Server Error] El visor de "${options.username}" falló en el puerto ${currentConf.viewerPort}:`, err.message);
+          });
+          return server;
+        };
+
         const mineflayerViewer = require('prismarine-viewer').mineflayer;
         mineflayerViewer(bot, { port: parseInt(currentConf.viewerPort), firstPerson: true, viewDistance: 2 });
+        
+        // Restore original createServer immediately
+        httpModule.createServer = originalCreateServer;
+
         console.log(`[System] Prismarine Viewer iniciado con éxito en http://localhost:${currentConf.viewerPort}`);
       } catch (err) {
         console.error(`[System] Error al iniciar Prismarine Viewer para "${options.username}":`, err.message);
@@ -1302,6 +1318,17 @@ function createBot() {
       bot.autoEatInterval = null;
     }
     console.log(`[System] Conexión finalizada (${reason}).`);
+    
+    // Clean up viewer to release the port
+    if (bot.viewer && typeof bot.viewer.close === 'function') {
+      try {
+        console.log(`[System] Cerrando Prismarine Viewer para liberar el puerto...`);
+        bot.viewer.close();
+      } catch (viewerErr) {
+        console.error('[System] Error al cerrar Prismarine Viewer:', viewerErr.message);
+      }
+    }
+
     if (botModule && typeof botModule.onEnd === 'function') {
       botModule.onEnd();
     }

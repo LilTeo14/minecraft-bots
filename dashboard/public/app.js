@@ -453,7 +453,6 @@ let botStatuses = {};
 let botSubTabs = {}; // botName -> 'config'|'console'|'inventory'
 let pollIntervals = {}; // botName -> { log: ID, inv: ID }
 let statusPollInterval = null;
-let liveViewModes = {}; // botName -> 'web'|'python'
 
 
 async function loadBots() {
@@ -619,58 +618,31 @@ function switchSubTab(cardId, subTab) {
         </div>
       `;
     } else {
-      const currentMode = liveViewModes[name];
-      if (!currentMode) {
-        cardBody.innerHTML = `
-          <div class="live-view-container prompt" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: var(--text-muted); text-align: center; background: rgba(0,0,0,0.2); border-radius: 8px;">
-            <div style="font-size: 3rem; margin-bottom: 1rem;">📺</div>
-            <h3 style="color: var(--text-main); margin-bottom: 0.5rem;">Seleccionar Visualización</h3>
-            <p style="font-size: 0.85rem; max-width: 320px; margin-bottom: 1.5rem;">Elige cómo deseas ver la transmisión en vivo. La visualización en Python consume menos memoria en Chrome.</p>
-            <div style="display: flex; gap: 1rem; width: 100%; max-width: 320px;">
-              <button class="btn btn-primary" onclick="setLiveViewMode('${name}', 'web', '${cardId}')" style="flex: 1; justify-content: center; padding: 0.75rem;">🌐 Vista Web (Iframe)</button>
-              <button class="btn btn-trabaja" onclick="setLiveViewMode('${name}', 'python', '${cardId}')" style="flex: 1; justify-content: center; padding: 0.75rem; background: #3b82f6; color: #fff;">🖥️ Ventana Python</button>
+      const currentQuality = localStorage.getItem(`live-quality-${name}`) || 'verylow';
+      cardBody.innerHTML = `
+        <div class="live-view-container" style="flex: 1; display: flex; flex-direction: column; height: 100%; min-height: 300px; position: relative;">
+          <div class="live-view-controls" style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.8); padding: 4px 12px; height: 30px; box-sizing: border-box; font-size: 0.8rem; border-bottom: 1px solid #333; color: #fff;">
+            <div style="font-weight: 600; display: flex; align-items: center; gap: 6px;">
+              <span style="color: #10b981;">●</span> Live
             </div>
-          </div>
-        `;
-      } else if (currentMode === 'python') {
-        cardBody.innerHTML = `
-          <div class="live-view-container python-active" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: var(--text-muted); text-align: center; background: rgba(0,0,0,0.3); border-radius: 8px;">
-            <div style="font-size: 3rem; margin-bottom: 1rem; color: #3b82f6;">🖥️</div>
-            <h3 style="color: var(--text-main); margin-bottom: 0.5rem;">Transmitiendo en Python</h3>
-            <p style="font-size: 0.85rem; max-width: 320px; margin-bottom: 1.5rem;">El bot "${name}" ha sido agregado a la cuadrícula de cámaras de seguridad en la ventana externa de Python.</p>
-            <div style="display: flex; flex-direction: column; gap: 0.75rem; width: 100%; max-width: 320px;">
-              <button class="btn btn-primary" onclick="setLiveViewMode('${name}', 'web', '${cardId}')" style="justify-content: center; padding: 0.6rem;">🌐 Cambiar a Vista Web (Iframe)</button>
-              <button class="btn btn-danger" onclick="stopPythonLiveView('${name}', '${cardId}')" style="justify-content: center; padding: 0.6rem;">✕ Quitar de Ventana Python</button>
-            </div>
-          </div>
-        `;
-      } else {
-        const currentQuality = localStorage.getItem(`live-quality-${name}`) || 'verylow';
-        cardBody.innerHTML = `
-          <div class="live-view-container" style="flex: 1; display: flex; flex-direction: column; height: 100%; min-height: 300px; position: relative;">
-            <div class="live-view-controls" style="display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.8); padding: 4px 12px; height: 30px; box-sizing: border-box; font-size: 0.8rem; border-bottom: 1px solid #333; color: #fff;">
-              <div style="font-weight: 600; display: flex; align-items: center; gap: 6px;">
-                <span style="color: #10b981;">●</span> Live
-              </div>
-              <div style="display: flex; align-items: center; gap: 12px;">
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <span style="color: #aaa; font-size: 0.75rem;">Calidad:</span>
-                  <select id="quality-select-${cardId}" onchange="changeLiveQuality('${name}', this.value, '${cardId}')" style="background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; cursor: pointer;">
-                    <option value="high" ${currentQuality === 'high' ? 'selected' : ''}>Alta</option>
-                    <option value="medium" ${currentQuality === 'medium' ? 'selected' : ''}>Media</option>
-                    <option value="low" ${currentQuality === 'low' ? 'selected' : ''}>Baja</option>
-                    <option value="verylow" ${currentQuality === 'verylow' ? 'selected' : ''}>Muy Baja (Retro/Ultra Rápida)</option>
-                  </select>
-                </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <div style="display: flex; align-items: center; gap: 6px;">
+                <span style="color: #aaa; font-size: 0.75rem;">Calidad:</span>
+                <select id="quality-select-${cardId}" onchange="changeLiveQuality('${name}', this.value, '${cardId}')" style="background: #222; color: #fff; border: 1px solid #444; border-radius: 4px; padding: 2px 6px; font-size: 0.75rem; cursor: pointer;">
+                  <option value="high" ${currentQuality === 'high' ? 'selected' : ''}>Alta</option>
+                  <option value="medium" ${currentQuality === 'medium' ? 'selected' : ''}>Media</option>
+                  <option value="low" ${currentQuality === 'low' ? 'selected' : ''}>Baja</option>
+                  <option value="verylow" ${currentQuality === 'verylow' ? 'selected' : ''}>Muy Baja (Retro/Ultra Rápida)</option>
+                </select>
               </div>
             </div>
-            <iframe id="live-iframe-${cardId}" src="http://${window.location.hostname}:${port}?quality=${currentQuality}" style="flex: 1; border: none; width: 100%; height: calc(100% - 30px);" allowfullscreen></iframe>
-            <div class="live-view-overlay" style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; color: #10b981; pointer-events: none;">
-              🔴 PUERTO ${port}
-            </div>
           </div>
-        `;
-      }
+          <iframe id="live-iframe-${cardId}" src="http://${window.location.hostname}:${port}?quality=${currentQuality}" style="flex: 1; border: none; width: 100%; height: calc(100% - 30px);" allowfullscreen></iframe>
+          <div class="live-view-overlay" style="position: absolute; bottom: 8px; right: 8px; background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px; font-size: 0.7rem; color: #10b981; pointer-events: none;">
+            🔴 PUERTO ${port}
+          </div>
+        </div>
+      `;
     }
   } else {
     cardBody.innerHTML = `
@@ -1119,61 +1091,6 @@ window.changeLiveQuality = function(name, quality, cardId) {
   }
 };
 
-window.setLiveViewMode = async function(name, mode, cardId) {
-  liveViewModes[name] = mode;
-  if (mode === 'python') {
-    try {
-      const response = await fetch('/api/python-grid/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-      });
-      if (response.ok) {
-        showToast(`🖥️ ${name} agregado a la cuadrícula de Python`);
-      } else {
-        const errData = await response.json();
-        showToast(`❌ Error: ${errData.error || 'No se pudo agregar a Python'}`, true);
-        liveViewModes[name] = undefined;
-      }
-    } catch (e) {
-      showToast('❌ Error de red al conectar con la cuadrícula de Python', true);
-      liveViewModes[name] = undefined;
-    }
-  } else if (mode === 'web') {
-    try {
-      await fetch('/api/python-grid/remove', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name })
-      });
-    } catch (e) {}
-  }
-  if (cardId) {
-    switchSubTab(cardId, 'live');
-  } else {
-    switchSubTab(name, 'live');
-  }
-};
 
-window.stopPythonLiveView = async function(name, cardId) {
-  try {
-    const response = await fetch('/api/python-grid/remove', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name })
-    });
-    if (response.ok) {
-      showToast(`✕ ${name} removido de la cuadrícula de Python`);
-      liveViewModes[name] = undefined;
-      if (cardId) {
-        switchSubTab(cardId, 'live');
-      } else {
-        switchSubTab(name, 'live');
-      }
-    }
-  } catch (e) {
-    showToast('❌ Error al remover de Python', true);
-  }
-};
 
 switchTab('bot-manager'); // Default tab on load

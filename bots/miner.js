@@ -960,6 +960,9 @@ async function manualWalk(targetPos, timeoutMs = 5000) {
           // Re-dig target blocks
           const feetBlock = bot.blockAt(targetPos);
           const headBlock = bot.blockAt(targetPos.offset(0, 1, 0));
+          if ((feetBlock && feetBlock.name !== 'air') || (headBlock && headBlock.name !== 'air')) {
+            await equipBestPickaxe();
+          }
           if (feetBlock && feetBlock.name !== 'air') {
             await digBlock(feetBlock);
           }
@@ -1029,6 +1032,10 @@ async function gotoBlockWithTimeout(pos, timeoutMs = 8000) {
 }
 
 async function walkTunnel(fromPos, toPos) {
+  // Force Y coordinate to match the target position to prevent floor-mining due to flooring errors
+  fromPos = fromPos.clone();
+  fromPos.y = toPos.y;
+
   console.log(`[Miner] Caminando manualmente por túnel de ${fromPos} a ${toPos}`);
   
   const diff = toPos.minus(fromPos);
@@ -1056,6 +1063,7 @@ async function walkTunnel(fromPos, toPos) {
     
     if (isPhysical(feetBlock) || isPhysical(headBlock)) {
       console.log(`[Miner] Encontrado obstáculo al caminar en ${current}. Minando...`);
+      await equipBestPickaxe();
       if (isPhysical(feetBlock)) await digBlock(feetBlock);
       if (isPhysical(headBlock)) await digBlock(headBlock);
     }

@@ -10,25 +10,6 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 // Track running processes: botName -> ChildProcess
 const runningBots = {};
 
-// Track bots shown in the python-grid
-const pythonGridBots = [];
-let pythonGridProcess = null;
-
-function startPythonGrid() {
-  if (pythonGridProcess) return;
-  console.log('[Dashboard Server] Iniciando ventana de Python (Grid)...');
-  const pythonPath = 'python';
-  const scriptPath = path.join(__dirname, 'python_grid.py');
-  
-  pythonGridProcess = spawn(pythonPath, [scriptPath], {
-    stdio: 'inherit'
-  });
-  
-  pythonGridProcess.on('exit', (code) => {
-    console.log(`[Dashboard Server] Ventana de Python finalizó con código ${code}`);
-    pythonGridProcess = null;
-  });
-}
 
 // Function to ensure all bots have a unique viewerPort assigned
 function ensureViewerPorts(config) {
@@ -330,8 +311,6 @@ const server = http.createServer((req, res) => {
         if (child) {
           child.kill();
           delete runningBots[name];
-          const idx = pythonGridBots.indexOf(name);
-          if (idx !== -1) pythonGridBots.splice(idx, 1);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true }));
         } else {
@@ -428,76 +407,6 @@ const server = http.createServer((req, res) => {
     });
   } 
 
-  else if (pathname === '/api/python-grid' && req.method === 'GET') {
-    readConfig((err, config) => {
-      if (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
-        return;
-      }
-      const gridData = pythonGridBots.map(name => {
-        return {
-          name: name,
-          port: config[name] ? config[name].viewerPort : null
-        };
-      });
-      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify(gridData));
-    });
-  }
-
-  else if (pathname === '/api/python-grid/add' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', () => {
-      try {
-        const { name } = JSON.parse(body);
-        if (!name) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Falta el nombre del bot' }));
-          return;
-        }
-        if (!pythonGridBots.includes(name)) {
-          if (pythonGridBots.length >= 8) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ error: 'La cuadrícula de Python está llena (máximo 8 bots)' }));
-            return;
-          }
-          pythonGridBots.push(name);
-        }
-        startPythonGrid();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, list: pythonGridBots }));
-      } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
-      }
-    });
-  }
-
-  else if (pathname === '/api/python-grid/remove' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => body += chunk.toString());
-    req.on('end', () => {
-      try {
-        const { name } = JSON.parse(body);
-        if (!name) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Falta el nombre del bot' }));
-          return;
-        }
-        const index = pythonGridBots.indexOf(name);
-        if (index !== -1) {
-          pythonGridBots.splice(index, 1);
-        }
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, list: pythonGridBots }));
-      } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
-      }
-    });
-  }
   
   // Serve static files
   else {

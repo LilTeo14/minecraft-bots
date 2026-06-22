@@ -118,16 +118,16 @@
       "z": 629
     },
     "miningState": {
-      "isMining": false,
+      "isMining": true,
       "startPos": {
         "x": -547,
         "y": -53,
         "z": 628
       },
       "mainDirection": "east",
-      "currentNodeIndex": 10,
-      "currentBranchSide": "left",
-      "branchProgress": 10,
+      "currentNodeIndex": 27,
+      "currentBranchSide": "right",
+      "branchProgress": 20,
       "mainTunnelProgress": 3,
       "branchLength": 20
     },
